@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline';
+                 img-src 'self' file: https: data:; media-src https: blob:;
+                 connect-src https://v.redd.it https://*.redd.it;
+                 frame-src https://www.youtube-nocookie.com https://player.vimeo.com;
+                 object-src 'none'; base-uri 'none'; form-action 'none'" />
+  <title>Lurk</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="titlebar">
+    <img class="titlebar-icon" src="icon.png" alt="" />
+    <span class="titlebar-logo">Lurk</span>
+  </div>
+
+  <div id="layout">
+    <aside id="sidebar">
+      <div class="side-section">
+        <div class="side-item" data-feed=""><span class="side-icon">🏠</span> Frontpage</div>
+        <div class="side-item" data-feed="r/popular"><span class="side-icon">🔥</span> Popular</div>
+        <div class="side-item" data-feed="r/all"><span class="side-icon">🌐</span> All</div>
+      </div>
+      <div class="side-label">MY SUBREDDITS</div>
+      <div id="my-subs" class="side-section"></div>
+      <form id="add-sub-form" autocomplete="off">
+        <input id="add-sub-input" type="text" placeholder="+ add subreddit" spellcheck="false" />
+      </form>
+      <div id="sub-suggestions"></div>
+    </aside>
+
+    <main id="main">
+      <header id="topbar">
+        <div id="feed-title">Frontpage</div>
+        <nav id="sorts">
+          <button class="sort-btn active" data-sort="hot">Hot</button>
+          <button class="sort-btn" data-sort="new">New</button>
+          <button class="sort-btn" data-sort="top">Top</button>
+          <button class="sort-btn" data-sort="rising">Rising</button>
+          <select id="top-time" class="hidden">
+            <option value="day">Today</option>
+            <option value="week" selected>Week</option>
+            <option value="month">Month</option>
+            <option value="year">Year</option>
+            <option value="all">All time</option>
+          </select>
+        </nav>
+        <form id="search-form" autocomplete="off">
+          <input id="search-input" type="text" placeholder="Search Reddit…" spellcheck="false" />
+        </form>
+        <button id="mode-toggle" title="Where comments open"></button>
+      </header>
+
+      <div id="content-row">
+        <div id="feed-scroll">
+          <div id="feed"></div>
+          <div id="feed-status"></div>
+          <div id="sentinel"></div>
+        </div>
+        <div id="pane-resizer" title="Drag to resize"></div>
+        <aside id="detail-pane" class="hidden">
+          <div id="pane-bar">
+            <span id="pane-label">Comments</span>
+            <button id="pane-close" title="Close (Esc)">✕</button>
+          </div>
+          <div id="pane-content"></div>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <!-- Post detail overlay -->
+  <div id="overlay" class="hidden">
+    <div id="overlay-backdrop"></div>
+    <div id="overlay-panel">
+      <button id="overlay-close" title="Close (Esc)">✕</button>
+      <div id="overlay-content"></div>
+    </div>
+  </div>
+
+  <script src="../node_modules/hls.js/dist/hls.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

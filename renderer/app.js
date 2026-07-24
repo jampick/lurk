@@ -1,0 +1,693 @@
+'use strict';
+
+/* ---------------- State ---------------- */
+const state = {
+  feed: '',            // '' = frontpage, 'r/pics', 'search:cats'
+  sort: 'hot',
+  topTime: 'week',
+  after: null,
+  loading: false,
+  exhausted: false,
+  seen: new Set()
+};
+
+const $ = (sel, el = document) => el.querySelector(sel);
+const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
+
+const feedEl = $('#feed');
+const statusEl = $('#feed-status');
+const scrollEl = $('#feed-scroll');
+const titleEl = $('#feed-title');
+
+/* ---------------- Helpers ---------------- */
+const decodeEntities = (() => {
+  const ta = document.createElement('textarea');
+  return (s) => { ta.innerHTML = s || ''; return ta.value; };
+})();
+
+const fixUrl = (u) => (u || '').replace(/&amp;/g, '&');
+
+function timeAgo(utc) {
+  const s = Math.max(1, Math.floor(Date.now() / 1000 - utc));
+  const units = [[31536000, 'y'], [2592000, 'mo'], [86400, 'd'], [3600, 'h'], [60, 'm']];
+  for (const [sec, label] of units) {
+    if (s >= sec) return Math.floor(s / sec) + label;
+  }
+  return s + 's';
+}
+
+function compact(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
+  return String(n);
+}
+
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+// Reddit's *_html fields are entity-escaped, pre-sanitized HTML fragments.
+// Belt-and-suspenders on top of Reddit's sanitization + our CSP: allow only
+// http(s) links, absolutize relative reddit paths, strip anything else.
+function redditHtml(escapedHtml) {
+  const div = el('div');
+  div.innerHTML = decodeEntities(escapedHtml);
+  $$('a', div).forEach(a => {
+    let abs = null;
+    try { abs = new URL(a.getAttribute('href') || '', 'https://www.reddit.com'); } catch { }
+    if (!abs || (abs.protocol !== 'https:' && abs.protocol !== 'http:')) {
+      a.removeAttribute('href');
+      return;
+    }
+    a.href = abs.href;
+    a.target = '_blank';           // window-open handler routes to system browser
+    a.rel = 'noreferrer noopener';
+  });
+  return div;
+}
+
+/* ---- inline images for links inside comments ---- */
+function imageUrlFor(href) {
+  let u;
+  try { u = new URL(href); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  if (/\.(jpe?g|png|gif|webp)$/i.test(u.pathname)) return u.href;
+  // giphy page links → direct gif
+  if (u.hostname.endsWith('giphy.com')) {
+    const m = u.pathname.match(/^\/gifs\/(?:[\w-]*-)?(\w+)\/?$/);
+    if (m) return `https://media.giphy.com/media/${m[1]}/giphy.gif`;
+  }
+  return null;
+}
+
+function inlineCommentImages(body) {
+  let count = 0;
+  for (const a of $$('a[href]', body)) {
+    if (count >= 6) break;                 // don't let one comment load dozens
+    const src = imageUrlFor(a.href);
+    if (!src) continue;
+    count++;
+    const img = el('img', 'comment-inline-img');
+    img.loading = 'lazy';
+    img.referrerPolicy = 'no-referrer';
+    img.src = src;
+    img.onclick = () => openLightbox(src);
+    img.onerror = () => img.remove();
+    // raw pasted URLs read terribly — shorten them to the host
+    if (a.textContent.trim().startsWith('http')) {
+      a.textContent = `🖼 ${new URL(src).hostname}`;
+    }
+    a.insertAdjacentElement('afterend', img);
+  }
+}
+
+async function api(path) {
+  const res = await window.lurk.fetchReddit(path);
+  if (!res.ok) throw new Error(res.error);
+  return res.data;
+}
+
+/* ---------------- Feed loading ---------------- */
+function feedPath() {
+  const limit = 'limit=25&raw_json=1';
+  const after = state.after ? `&after=${state.after}` : '';
+  if (state.feed.startsWith('search:')) {
+    const q = encodeURIComponent(state.feed.slice(7));
+    return `/search.json?q=${q}&sort=relevance&${limit}${after}`;
+  }
+  const base = state.feed ? `/${state.feed}` : '';
+  const t = state.sort === 'top' ? `&t=${state.topTime}` : '';
+  return `${base}/${state.sort}.json?${limit}${t}${after}`;
+}
+
+async function loadMore() {
+  if (state.loading || state.exhausted) return;
+  state.loading = true;
+  statusEl.innerHTML = '';
+  statusEl.appendChild(el('div', 'spinner'));
+  try {
+    const data = await api(feedPath());
+    const children = data?.data?.children || [];
+    state.after = data?.data?.after || null;
+    if (!state.after) state.exhausted = true;
+    const posts = children.filter(c => c.kind === 't3' && !state.seen.has(c.data.id));
+    posts.forEach(c => state.seen.add(c.data.id));
+    posts.forEach(c => feedEl.appendChild(renderPost(c.data)));
+    statusEl.textContent = feedEl.children.length === 0
+      ? 'Nothing here. Try another subreddit.'
+      : (state.exhausted ? "That's everything." : '');
+  } catch (err) {
+    statusEl.textContent = `Couldn't load: ${err.message} — scroll to retry`;
+  } finally {
+    state.loading = false;
+  }
+}
+
+function resetFeed() {
+  closeDetail();
+  state.after = null;
+  state.exhausted = false;
+  state.seen.clear();
+  $$('video', feedEl).forEach(v => { v.pause(); v._hls?.destroy(); });
+  feedEl.innerHTML = '';
+  scrollEl.scrollTop = 0;
+  loadMore();
+}
+
+function setFeed(feed, displayName) {
+  state.feed = feed;
+  titleEl.textContent = displayName;
+  $$('.side-item').forEach(item =>
+    item.classList.toggle('active', item.dataset.feed === feed));
+  resetFeed();
+}
+
+/* infinite scroll */
+new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting) loadMore();
+}, { root: scrollEl, rootMargin: '900px' }).observe($('#sentinel'));
+
+/* ---------------- Post rendering ---------------- */
+function renderPost(p) {
+  const card = el('article', 'post-card');
+
+  const head = el('div', 'post-head');
+  const sub = el('span', 'post-sub', p.subreddit_name_prefixed);
+  sub.onclick = () => setFeed(`r/${p.subreddit}`, p.subreddit_name_prefixed);
+  head.appendChild(sub);
+  head.appendChild(el('span', null, `u/${p.author} · ${timeAgo(p.created_utc)}`));
+  if (p.link_flair_text) head.appendChild(el('span', 'post-flair', p.link_flair_text));
+  if (p.over_18) head.appendChild(el('span', 'post-nsfw', 'NSFW'));
+  card.appendChild(head);
+
+  const title = el('a', 'post-title', decodeEntities(p.title));
+  title.onclick = () => openPost(p, card);
+  card.appendChild(title);
+
+  const media = renderMedia(p);
+  if (media) card.appendChild(media);
+
+  if (p.selftext && !media) {
+    const st = el('div', 'post-selftext', decodeEntities(p.selftext).slice(0, 600));
+    card.appendChild(st);
+  }
+
+  const foot = el('div', 'post-foot');
+  const score = el('span', 'foot-btn foot-score', `▲ ${compact(p.score)}`);
+  const comments = el('button', 'foot-btn', `💬 ${compact(p.num_comments)}`);
+  comments.onclick = () => openPost(p, card);
+  const open = el('button', 'foot-btn', '↗ Reddit');
+  open.onclick = () => window.lurk.openExternal('https://www.reddit.com' + p.permalink);
+  foot.append(score, comments, open);
+  card.appendChild(foot);
+
+  return card;
+}
+
+/* ---------------- Media rendering ---------------- */
+function bestPreview(p) {
+  const imgs = p.preview?.images?.[0];
+  if (!imgs) return null;
+  const candidates = [...(imgs.resolutions || []), imgs.source].filter(Boolean);
+  const pick = candidates.find(r => r.width >= 960) || candidates[candidates.length - 1];
+  return pick ? fixUrl(pick.url) : null;
+}
+
+function nsfwWrap(p, mediaEl) {
+  if (!p.over_18) return mediaEl;
+  const wrap = el('div', 'media-blur');
+  wrap.appendChild(mediaEl);
+  wrap.onclick = (e) => {
+    e.stopPropagation();
+    wrap.classList.remove('media-blur');
+    wrap.onclick = null;
+  };
+  return wrap;
+}
+
+function renderMedia(p) {
+  const wrap = el('div', 'post-media');
+
+  // Reddit-hosted video
+  const rv = p.media?.reddit_video || p.preview?.reddit_video_preview;
+  if (rv) {
+    wrap.appendChild(makeVideo(rv, p));
+    return nsfwWrap(p, wrap);
+  }
+
+  // Gallery
+  if (p.is_gallery && p.gallery_data && p.media_metadata) {
+    const urls = p.gallery_data.items
+      .map(item => {
+        const meta = p.media_metadata[item.media_id];
+        if (!meta || meta.status !== 'valid') return null;
+        const src = meta.s?.u || meta.s?.gif || meta.p?.[meta.p.length - 1]?.u;
+        return src ? fixUrl(src) : null;
+      })
+      .filter(Boolean);
+    if (urls.length) {
+      wrap.appendChild(makeGallery(urls));
+      return nsfwWrap(p, wrap);
+    }
+  }
+
+  // YouTube
+  const yt = (p.url || '').match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{6,})/);
+  if (yt) {
+    const iframe = el('iframe');
+    iframe.src = `https://www.youtube-nocookie.com/embed/${yt[1]}`;
+    iframe.allow = 'encrypted-media; picture-in-picture; fullscreen';
+    wrap.appendChild(iframe);
+    return wrap;
+  }
+
+  // Direct images / gifs (imgur .gifv → .mp4)
+  const url = fixUrl(p.url || '');
+  if (/\.gifv$/i.test(url)) {
+    const v = el('video');
+    v.src = url.replace(/\.gifv$/i, '.mp4');
+    v.loop = v.muted = v.autoplay = v.playsInline = true;
+    wrap.appendChild(v);
+    return nsfwWrap(p, wrap);
+  }
+  if (/\.gif(\?|$)/i.test(url)) {
+    // animated gif: prefer reddit's looping mp4 variant (far lighter), else the real gif
+    const mp4 = p.preview?.images?.[0]?.variants?.mp4?.source?.url;
+    if (mp4) {
+      const v = el('video');
+      v.src = fixUrl(mp4);
+      v.loop = v.muted = v.autoplay = v.playsInline = true;
+      wrap.appendChild(v);
+    } else {
+      const img = el('img');
+      img.loading = 'lazy';
+      img.src = url;                    // the gif itself, not the static preview
+      img.onclick = () => openLightbox(url);
+      wrap.appendChild(img);
+    }
+    return nsfwWrap(p, wrap);
+  }
+  if (/\.(jpe?g|png|webp)(\?|$)/i.test(url) || p.post_hint === 'image') {
+    const img = el('img');
+    img.loading = 'lazy';
+    img.src = bestPreview(p) || url;
+    img.onclick = () => openLightbox(fixUrl(p.url) || img.src);
+    wrap.appendChild(img);
+    return nsfwWrap(p, wrap);
+  }
+
+  // External link: big article image inline when reddit has one, link bar below
+  if (!p.is_self && p.url && !p.url.includes(p.permalink)) {
+    const outer = el('div');
+    const openArticle = () => window.lurk.openExternal(p.url);
+
+    const big = bestPreview(p);
+    const thumb = /^https?:/.test(p.thumbnail || '') ? fixUrl(p.thumbnail) : null;
+    if (big) {
+      const img = el('img');
+      img.loading = 'lazy';
+      img.src = big;
+      img.style.cursor = 'pointer';
+      img.onclick = openArticle;
+      wrap.appendChild(img);
+      outer.appendChild(nsfwWrap(p, wrap));
+    }
+
+    const link = el('div', 'link-card');
+    if (!big && thumb) {
+      const img = el('img');
+      img.src = thumb;
+      img.loading = 'lazy';
+      link.appendChild(img);
+    }
+    let host = '';
+    try { host = new URL(p.url).hostname.replace(/^www\./, ''); } catch { host = p.url; }
+    link.appendChild(el('div', 'link-url', `${host} ↗`));
+    link.onclick = openArticle;
+    outer.appendChild(link);
+    return outer;
+  }
+
+  return null;
+}
+
+function makeVideo(rv, p) {
+  const video = el('video');
+  video.playsInline = true;
+  if (rv.is_gif) {
+    // reddit-hosted "gif" (soundless clip): behave like a gif — autoplay + loop
+    video.loop = video.muted = video.autoplay = true;
+    video.src = fixUrl(rv.fallback_url);
+    return video;
+  }
+  video.controls = true;
+  video.preload = 'metadata';
+  const poster = bestPreview(p);
+  if (poster) video.poster = poster;
+
+  const hlsUrl = fixUrl(rv.hls_url);
+  if (hlsUrl && window.Hls && Hls.isSupported()) {
+    // attach immediately (manifest only) so the element is playable;
+    // segments start downloading on first play
+    const hls = new Hls({ maxBufferLength: 20, autoStartLoad: false });
+    hls.loadSource(hlsUrl);
+    hls.attachMedia(video);
+    video._hls = hls;
+    video.addEventListener('play', () => hls.startLoad(), { once: true });
+    hls.on(Hls.Events.ERROR, (_e, data) => {
+      if (data.fatal) {             // HLS died — fall back to soundless mp4
+        hls.destroy();
+        video._hls = null;
+        video.src = fixUrl(rv.fallback_url);
+        video.play().catch(() => {});
+      }
+    });
+  } else {
+    video.src = fixUrl(rv.fallback_url);
+  }
+  return video;
+}
+
+function makeGallery(urls) {
+  const g = el('div', 'gallery');
+  let idx = 0;
+  const img = el('img');
+  img.loading = 'lazy';
+  img.src = urls[0];
+  img.onclick = () => openLightbox(urls[idx]);
+  const count = el('span', 'gallery-count', `1 / ${urls.length}`);
+  const show = (i) => {
+    idx = (i + urls.length) % urls.length;
+    img.src = urls[idx];
+    count.textContent = `${idx + 1} / ${urls.length}`;
+  };
+  const prev = el('button', 'gallery-nav gallery-prev', '‹');
+  const next = el('button', 'gallery-nav gallery-next', '›');
+  prev.onclick = (e) => { e.stopPropagation(); show(idx - 1); };
+  next.onclick = (e) => { e.stopPropagation(); show(idx + 1); };
+  g.append(img, count);
+  if (urls.length > 1) g.append(prev, next);
+  return g;
+}
+
+/* ---------------- Lightbox ---------------- */
+function openLightbox(src) {
+  const box = el('div');
+  box.id = 'lightbox';
+  const img = el('img');
+  img.src = src;
+  box.appendChild(img);
+  box.onclick = () => box.remove();
+  document.body.appendChild(box);
+}
+
+/* ---------------- Post detail + comments ---------------- */
+const overlay = $('#overlay');
+const overlayContent = $('#overlay-content');
+const paneEl = $('#detail-pane');
+const paneContent = $('#pane-content');
+let selectedCard = null;
+
+// where comments open: 'side' (panel next to feed) or 'overlay' (popup)
+function commentsMode() { return localStorage.getItem('commentsMode') || 'side'; }
+
+function openPost(p, card) {
+  closeDetail();
+  if (card) {
+    card.classList.add('selected');
+    selectedCard = card;
+  }
+  const useSide = commentsMode() === 'side' && window.innerWidth >= 950;
+  if (useSide) {
+    paneEl.classList.remove('hidden');
+    // the post itself stays in the feed — the panel is comments only
+    renderDetail(paneContent, p, { commentsOnly: true });
+  } else {
+    overlay.classList.remove('hidden');
+    renderDetail(overlayContent, p);
+  }
+}
+
+async function renderDetail(container, p, { commentsOnly = false } = {}) {
+  container.innerHTML = '';
+  container.scrollTop = 0;
+
+  if (!commentsOnly) {
+    const head = el('div', 'post-head');
+    const sub = el('span', 'post-sub', p.subreddit_name_prefixed);
+    sub.onclick = () => { closeDetail(); setFeed(`r/${p.subreddit}`, p.subreddit_name_prefixed); };
+    head.appendChild(sub);
+    head.appendChild(el('span', null,
+      `u/${p.author} · ${timeAgo(p.created_utc)} · ▲ ${compact(p.score)}`));
+    container.appendChild(head);
+    container.appendChild(el('h1', 'detail-title', decodeEntities(p.title)));
+
+    const media = renderMedia(p);
+    if (media) container.appendChild(media);
+
+    if (p.selftext_html) {
+      const body = redditHtml(p.selftext_html);
+      body.className = 'detail-selftext';
+      container.appendChild(body);
+    }
+  }
+
+  container.appendChild(
+    el('div', 'comments-header', `${compact(p.num_comments)} comments`));
+  const spinner = el('div', 'spinner');
+  container.appendChild(spinner);
+
+  try {
+    const data = await api(`${p.permalink}.json?raw_json=1&limit=80&depth=6`);
+    spinner.remove();
+    const comments = data?.[1]?.data?.children || [];
+    const frag = document.createDocumentFragment();
+    comments.forEach(c => {
+      const node = renderComment(c, p.author, 0);
+      if (node) frag.appendChild(node);
+    });
+    container.appendChild(frag);
+    if (!comments.length) {
+      container.appendChild(el('div', 'post-head', 'No comments yet.'));
+    }
+  } catch (err) {
+    spinner.remove();
+    container.appendChild(el('div', 'post-head', `Couldn't load comments: ${err.message}`));
+  }
+}
+
+function renderComment(c, opAuthor, depth) {
+  if (c.kind === 'more') {
+    if (!c.data?.count) return null;
+    return el('button', 'load-more-comments', `+ ${c.data.count} more replies (open on Reddit)`);
+  }
+  if (c.kind !== 't1') return null;
+  const d = c.data;
+
+  const node = el('div', `comment depth-${Math.min(depth, 5)}`);
+  const meta = el('div', 'comment-meta');
+  meta.appendChild(el('span', 'comment-toggle', '▼'));
+  const author = el('span', 'comment-author' + (d.author === opAuthor ? ' op' : ''), `u/${d.author}`);
+  meta.appendChild(author);
+  meta.appendChild(el('span', 'comment-score', `▲ ${compact(d.score ?? 0)}`));
+  meta.appendChild(el('span', null, timeAgo(d.created_utc)));
+  meta.onclick = () => node.classList.toggle('collapsed');
+  meta.title = 'Collapse / expand thread';
+  node.appendChild(meta);
+
+  const body = redditHtml(d.body_html);
+  body.className = 'comment-body';
+  inlineCommentImages(body);
+  node.appendChild(body);
+
+  const replies = d.replies?.data?.children || [];
+  let childCount = 0;
+  replies.forEach(r => {
+    const child = renderComment(r, opAuthor, depth + 1);
+    if (child) { node.appendChild(child); childCount++; }
+  });
+  if (childCount) {
+    meta.appendChild(el('span', 'comment-hidden',
+      `${childCount} ${childCount === 1 ? 'reply' : 'replies'} hidden`));
+  }
+  return node;
+}
+
+function closeDetail() {
+  overlay.classList.add('hidden');
+  paneEl.classList.add('hidden');
+  $$('video', overlayContent).forEach(v => v.pause());
+  $$('video', paneContent).forEach(v => v.pause());
+  overlayContent.innerHTML = '';
+  paneContent.innerHTML = '';
+  if (selectedCard) {
+    selectedCard.classList.remove('selected');
+    selectedCard = null;
+  }
+}
+$('#overlay-close').onclick = closeDetail;
+$('#overlay-backdrop').onclick = closeDetail;
+$('#pane-close').onclick = closeDetail;
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const box = $('#lightbox');
+    if (box) box.remove();
+    else closeDetail();
+  }
+});
+
+/* drag the divider to resize the comments panel */
+const resizer = $('#pane-resizer');
+const savedPaneWidth = parseInt(localStorage.getItem('paneWidth'), 10);
+if (savedPaneWidth) paneEl.style.width = savedPaneWidth + 'px';
+
+resizer.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  resizer.classList.add('dragging');
+  resizer.setPointerCapture(e.pointerId);
+  const row = $('#content-row').getBoundingClientRect();
+
+  const onMove = (ev) => {
+    const w = Math.round(row.right - ev.clientX);
+    paneEl.style.width = Math.max(300, Math.min(w, row.width * 0.7)) + 'px';
+  };
+  const onUp = () => {
+    resizer.classList.remove('dragging');
+    resizer.removeEventListener('pointermove', onMove);
+    resizer.removeEventListener('pointerup', onUp);
+    localStorage.setItem('paneWidth', parseInt(paneEl.style.width, 10) || '');
+  };
+  resizer.addEventListener('pointermove', onMove);
+  resizer.addEventListener('pointerup', onUp);
+});
+
+/* comments location toggle */
+const modeBtn = $('#mode-toggle');
+function updateModeButton() {
+  modeBtn.textContent = commentsMode() === 'side' ? '🗨 Side panel' : '🗨 Popup';
+}
+modeBtn.onclick = () => {
+  localStorage.setItem('commentsMode', commentsMode() === 'side' ? 'overlay' : 'side');
+  updateModeButton();
+  closeDetail();
+};
+updateModeButton();
+
+/* ---------------- Sidebar: my subreddits ---------------- */
+const DEFAULT_SUBS = ['pics', 'videos', 'aww', 'technology', 'worldnews', 'gaming', 'movies'];
+
+function getMySubs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('mySubs'));
+    return Array.isArray(saved) ? saved : [...DEFAULT_SUBS];
+  } catch { return [...DEFAULT_SUBS]; }
+}
+function saveMySubs(subs) { localStorage.setItem('mySubs', JSON.stringify(subs)); }
+
+function renderSidebar() {
+  const wrap = $('#my-subs');
+  wrap.innerHTML = '';
+  for (const name of getMySubs()) {
+    const item = el('div', 'side-item');
+    item.dataset.feed = `r/${name}`;
+    item.appendChild(el('span', 'side-icon', '·'));
+    item.appendChild(el('span', null, `r/${name}`));
+    const rm = el('button', 'side-remove', '✕');
+    rm.title = 'Remove';
+    rm.onclick = (e) => {
+      e.stopPropagation();
+      saveMySubs(getMySubs().filter(s => s !== name));
+      renderSidebar();
+    };
+    item.appendChild(rm);
+    item.onclick = () => setFeed(`r/${name}`, `r/${name}`);
+    item.classList.toggle('active', state.feed === `r/${name}`);
+    wrap.appendChild(item);
+  }
+}
+
+function addSub(name) {
+  name = name.trim().replace(/^\/?(r\/)?/i, '').replace(/\/+$/, '');
+  if (!/^\w{2,21}$/.test(name)) return;
+  const subs = getMySubs();
+  if (!subs.some(s => s.toLowerCase() === name.toLowerCase())) {
+    subs.push(name);
+    subs.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    saveMySubs(subs);
+  }
+  renderSidebar();
+  setFeed(`r/${name}`, `r/${name}`);
+}
+
+$('#add-sub-form').onsubmit = (e) => {
+  e.preventDefault();
+  const input = $('#add-sub-input');
+  addSub(input.value);
+  input.value = '';
+  $('#sub-suggestions').innerHTML = '';
+};
+
+/* subreddit autocomplete */
+let suggestTimer = null;
+$('#add-sub-input').addEventListener('input', (e) => {
+  clearTimeout(suggestTimer);
+  const q = e.target.value.trim();
+  const box = $('#sub-suggestions');
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  suggestTimer = setTimeout(async () => {
+    try {
+      const data = await api(`/subreddits/search.json?q=${encodeURIComponent(q)}&limit=6&raw_json=1`);
+      box.innerHTML = '';
+      for (const c of data?.data?.children || []) {
+        const s = c.data;
+        if (s.subreddit_type !== 'public') continue;
+        const item = el('div', 'sub-suggestion', `r/${s.display_name}`);
+        item.appendChild(el('span', 'subs-count', compact(s.subscribers || 0)));
+        item.onclick = () => {
+          addSub(s.display_name);
+          $('#add-sub-input').value = '';
+          box.innerHTML = '';
+        };
+        box.appendChild(item);
+      }
+    } catch { /* suggestions are best-effort */ }
+  }, 300);
+});
+
+/* built-in feeds */
+$$('#sidebar .side-item[data-feed]').forEach(item => {
+  if (item.parentElement.id === 'my-subs') return;
+  item.onclick = () => {
+    const feed = item.dataset.feed;
+    setFeed(feed, item.textContent.trim());
+  };
+});
+
+/* ---------------- Sorts + search ---------------- */
+$$('.sort-btn').forEach(btn => {
+  btn.onclick = () => {
+    $$('.sort-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.sort = btn.dataset.sort;
+    $('#top-time').classList.toggle('hidden', state.sort !== 'top');
+    resetFeed();
+  };
+});
+$('#top-time').onchange = (e) => { state.topTime = e.target.value; resetFeed(); };
+
+$('#search-form').onsubmit = (e) => {
+  e.preventDefault();
+  const q = $('#search-input').value.trim();
+  if (!q) return;
+  state.feed = `search:${q}`;
+  titleEl.textContent = `Search: ${q}`;
+  $$('.side-item').forEach(i => i.classList.remove('active'));
+  resetFeed();
+};
+
+/* ---------------- Boot ---------------- */
+renderSidebar();
+setFeed('', 'Frontpage');

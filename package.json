@@ -1,0 +1,41 @@
+{
+  "name": "lurk",
+  "productName": "Lurk",
+  "version": "0.1.0",
+  "description": "A fast, modern, media-first Reddit viewer for desktop",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "author": "OddJob",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "hls.js": "^1.5.13"
+  },
+  "build": {
+    "appId": "com.oddjob.lurk",
+    "productName": "Lurk",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "node_modules/hls.js/dist/hls.min.js"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.news"
+    }
+  },
+  "allowScripts": {
+    "electron@31.7.7": true,
+    "electron-winstaller@5.4.0": true
+  }
+}
