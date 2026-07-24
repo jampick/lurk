@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, net, session, shell, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, net, nativeImage, session, shell, nativeTheme } = require('electron');
 const path = require('path');
 
 function createWindow() {
@@ -164,6 +164,17 @@ ipcMain.handle('reddit:fetch', async (_event, apiPath) => {
 
 ipcMain.handle('app:openExternal', (_event, url) => {
   if (typeof url === 'string' && /^https?:\/\//.test(url)) shell.openExternal(url);
+});
+
+// Taskbar overlay badge (Windows) — renderer draws the count dot and sends it
+ipcMain.handle('app:badge', (event, dataUrl, count) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || process.platform !== 'win32') return;
+  if (dataUrl && typeof dataUrl === 'string' && dataUrl.startsWith('data:image/')) {
+    win.setOverlayIcon(nativeImage.createFromDataURL(dataUrl), `${count} new comments`);
+  } else {
+    win.setOverlayIcon(null, '');
+  }
 });
 
 /*

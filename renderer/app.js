@@ -548,6 +548,8 @@ function openPost(p, card) {
     paneEl.classList.remove('hidden');
     // the post itself stays in the feed — the panel is comments only
     renderDetail(paneContent, p, { commentsOnly: true });
+    lastOpenPost = p;
+    startLive(p);
   } else {
     overlay.classList.remove('hidden');
     renderDetail(overlayContent, p);
@@ -611,6 +613,7 @@ function renderComment(c, opAuthor, depth) {
   const d = c.data;
 
   const node = el('div', `comment depth-${Math.min(depth, 5)}`);
+  node.dataset.cid = d.id;
   const meta = el('div', 'comment-meta');
   meta.appendChild(el('span', 'comment-toggle', '▼'));
   const author = el('span', 'comment-author' + (d.author === opAuthor ? ' op' : ''), `u/${d.author}`);
@@ -640,6 +643,7 @@ function renderComment(c, opAuthor, depth) {
 }
 
 function closeDetail() {
+  stopLive();
   overlay.classList.add('hidden');
   paneEl.classList.add('hidden');
   teardownMedia(overlayContent);
@@ -857,6 +861,119 @@ hideReadBtn.onclick = () => {
   applyHideRead();
 };
 applyHideRead();
+
+/* ---------------- Live post mode (issue #17) ---------------- */
+// Poll the open post every 30s; merge new comments in place with a fading
+// glow, keep scroll steady, and surface unseen counts in the title + taskbar.
+let live = null;          // { post, unseen, timer }
+let lastOpenPost = null;
+
+const liveBtn = $('#live-toggle');
+function liveOn() { return localStorage.getItem('liveMode') !== '0'; }
+function updateLiveBtn() {
+  liveBtn.textContent = liveOn() ? '🔴 Live' : '⚪ Live';
+  liveBtn.classList.toggle('on', liveOn());
+}
+liveBtn.onclick = () => {
+  localStorage.setItem('liveMode', liveOn() ? '0' : '1');
+  updateLiveBtn();
+  if (liveOn() && lastOpenPost && !paneEl.classList.contains('hidden')) startLive(lastOpenPost);
+  else stopLive();
+};
+updateLiveBtn();
+
+function startLive(p) {
+  stopLive();
+  if (!liveOn()) return;
+  live = { post: p, unseen: 0, timer: setInterval(pollLive, 30000) };
+}
+function stopLive() {
+  if (live) { clearInterval(live.timer); live = null; }
+  setBadge(0);
+}
+
+async function pollLive() {
+  if (!live || document.hidden || paneEl.classList.contains('hidden')) return;
+  const p = live.post;
+  let data;
+  try { data = await api(`${p.permalink}.json?raw_json=1&limit=80&depth=6`); } catch { return; }
+  if (!live || live.post !== p) return;      // closed or switched mid-fetch
+  const fresh = data?.[0]?.data?.children?.[0]?.data;
+  const comments = data?.[1]?.data?.children || [];
+  if (fresh) {
+    const header = paneContent.querySelector('.comments-header');
+    if (header) header.textContent = `${compact(fresh.num_comments)} comments`;
+    if (selectedCard) {
+      const score = selectedCard.querySelector('.foot-score');
+      if (score) score.textContent = `▲ ${compact(fresh.score)}`;
+      const btns = selectedCard.querySelectorAll('.foot-btn');
+      if (btns[1]) btns[1].textContent = `💬 ${compact(fresh.num_comments)}`;
+    }
+  }
+  const added = mergeComments(comments, paneContent, p.author, 0);
+  if (added > 0 && !document.hasFocus()) {
+    live.unseen += added;
+    setBadge(live.unseen);
+  }
+}
+
+function mergeComments(children, parentEl, opAuthor, depth) {
+  let added = 0;
+  let prev = null;
+  for (const c of children) {
+    if (c.kind !== 't1') continue;
+    const d = c.data;
+    const existing = paneContent.querySelector(`[data-cid="${CSS.escape(d.id)}"]`);
+    if (existing) {
+      const score = existing.querySelector(':scope > .comment-meta .comment-score');
+      if (score) score.textContent = `▲ ${compact(d.score ?? 0)}`;
+      added += mergeComments(d.replies?.data?.children || [], existing, opAuthor, depth + 1);
+      prev = existing;
+      continue;
+    }
+    const node = renderComment(c, opAuthor, depth);
+    if (!node || !node.dataset?.cid) continue;   // 'more' stubs don't merge live
+    node.classList.add('comment-fresh');
+    if (prev) prev.insertAdjacentElement('afterend', node);
+    else if (depth === 0) {
+      const header = paneContent.querySelector('.comments-header');
+      if (header) header.insertAdjacentElement('afterend', node);
+      else paneContent.appendChild(node);
+    } else {
+      parentEl.appendChild(node);
+    }
+    // inserting above the viewport must not move what the user is reading
+    if (node.getBoundingClientRect().top < paneContent.getBoundingClientRect().top) {
+      paneContent.scrollTop += node.offsetHeight;
+    }
+    prev = node;
+    added += 1 + node.querySelectorAll('.comment').length;
+  }
+  return added;
+}
+
+function setBadge(n) {
+  document.title = n > 0 ? `(${n > 99 ? '99+' : n}) Lurk` : 'Lurk';
+  let dataUrl = null;
+  if (n > 0) {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#7c6cff';
+    ctx.beginPath(); ctx.arc(16, 16, 16, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 19px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n > 9 ? '9+' : String(n), 16, 17);
+    dataUrl = canvas.toDataURL();
+  }
+  window.lurk.setBadge(dataUrl, n);
+}
+window.addEventListener('focus', () => {
+  if (live) live.unseen = 0;
+  setBadge(0);
+});
 
 /* ---------------- Boot ---------------- */
 renderSidebar();
