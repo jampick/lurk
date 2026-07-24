@@ -77,8 +77,27 @@ async function redditFetch(url) {
 app.whenReady().then(() => {
   nativeTheme.themeSource = 'dark';
 
-  // Stable Windows identity for taskbar grouping/pinning (matches NSIS appId)
-  app.setAppUserModelId('com.oddjob.lurk');
+  // Stable Windows identity for taskbar grouping/pinning. Windows 11 resolves
+  // the taskbar icon from the Start Menu shortcut matching this id — the dev
+  // instance gets its own id + self-written shortcut so it shows Lurk's icon
+  // (and is pinnable) instead of electron.exe's.
+  const appUserModelId = app.isPackaged ? 'com.oddjob.lurk' : 'com.oddjob.lurk.dev';
+  app.setAppUserModelId(appUserModelId);
+  if (!app.isPackaged && process.platform === 'win32') {
+    try {
+      const shortcutPath = path.join(app.getPath('appData'),
+        'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Lurk (Dev).lnk');
+      shell.writeShortcutLink(shortcutPath, 'create', {
+        target: process.execPath,
+        args: `"${__dirname}"`,
+        cwd: __dirname,
+        icon: path.join(__dirname, 'build', 'icon.ico'),
+        iconIndex: 0,
+        appUserModelId,
+        description: 'Lurk (dev instance)'
+      });
+    } catch { /* shortcut is cosmetic — never block startup on it */ }
+  }
 
   // Fullscreen is the one permission pages legitimately use (video players).
   // Everything else — camera, mic, location, notifications — stays denied.
