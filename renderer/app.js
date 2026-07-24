@@ -259,6 +259,7 @@ function renderMedia(p) {
   const yt = (p.url || '').match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{6,})/);
   if (yt) {
     const iframe = el('iframe');
+    iframe._ytid = yt[1];
     iframe.src = `https://www.youtube-nocookie.com/embed/${yt[1]}`
       + `?enablejsapi=1&playsinline=1&mute=${soundOn() ? 0 : 1}`;
     iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
@@ -473,12 +474,38 @@ function teardownMedia(container) {
   $$('iframe', container).forEach(f => autoplayObs.unobserve(f));
 }
 
+// Embedding disabled by the uploader (101/150/152/153) — swap the dead
+// iframe for a thumbnail card that opens the video on YouTube.
+function ytEmbedFallback(iframe) {
+  const id = iframe._ytid;
+  const wrap = iframe.parentElement;
+  if (iframe._embedBlocked || !id || !wrap) return;
+  iframe._embedBlocked = true;
+  autoplayObs.unobserve(iframe);
+  const card = el('div', 'yt-fallback');
+  const img = el('img');
+  img.loading = 'lazy';
+  img.src = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+  card.appendChild(img);
+  card.appendChild(el('div', 'yt-fallback-label', '▶ Watch on YouTube'));
+  card.onclick = () => window.lurk.openExternal('https://www.youtube.com/watch?v=' + id);
+  wrap.innerHTML = '';
+  wrap.appendChild(card);
+}
+
 // YouTube's player reports mute changes via the widget message channel —
 // mirror user (un)mutes inside the iframe into the global preference.
 window.addEventListener('message', (e) => {
   if (typeof e.data !== 'string' || !/youtube/.test(e.origin || '')) return;
   let d;
   try { d = JSON.parse(e.data); } catch { return; }
+  if (d?.event === 'onError') {
+    if ([101, 150, 152, 153].includes(Number(d.info))) {
+      const frame = $$('iframe').find(f => f.contentWindow === e.source);
+      if (frame) ytEmbedFallback(frame);
+    }
+    return;
+  }
   const muted = d?.info?.muted;
   if (typeof muted !== 'boolean') return;
   const frame = $$('iframe').find(f => f.contentWindow === e.source);
