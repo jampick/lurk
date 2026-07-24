@@ -151,7 +151,7 @@ function resetFeed() {
   state.after = null;
   state.exhausted = false;
   state.seen.clear();
-  $$('video', feedEl).forEach(v => { v.pause(); v._hls?.destroy(); });
+  teardownMedia(feedEl);
   feedEl.innerHTML = '';
   scrollEl.scrollTop = 0;
   loadMore();
@@ -255,12 +255,19 @@ function renderMedia(p) {
     }
   }
 
-  // YouTube
+  // YouTube — autoplay handled by the visibility observer via the widget API
   const yt = (p.url || '').match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{6,})/);
   if (yt) {
     const iframe = el('iframe');
-    iframe.src = `https://www.youtube-nocookie.com/embed/${yt[1]}`;
-    iframe.allow = 'encrypted-media; picture-in-picture; fullscreen';
+    iframe.src = `https://www.youtube-nocookie.com/embed/${yt[1]}`
+      + `?enablejsapi=1&playsinline=1&mute=${soundOn() ? 0 : 1}`;
+    iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+    iframe.addEventListener('load', () => {
+      try {
+        iframe.contentWindow?.postMessage(JSON.stringify({ event: 'listening' }), '*');
+      } catch { }
+    });
+    autoplayObs.observe(iframe);
     wrap.appendChild(iframe);
     return wrap;
   }
@@ -271,6 +278,7 @@ function renderMedia(p) {
     const v = el('video');
     v.src = url.replace(/\.gifv$/i, '.mp4');
     v.loop = v.muted = v.autoplay = v.playsInline = true;
+    autoplayObs.observe(v);
     wrap.appendChild(v);
     return nsfwWrap(p, wrap);
   }
@@ -281,6 +289,7 @@ function renderMedia(p) {
       const v = el('video');
       v.src = fixUrl(mp4);
       v.loop = v.muted = v.autoplay = v.playsInline = true;
+      autoplayObs.observe(v);
       wrap.appendChild(v);
     } else {
       const img = el('img');
@@ -342,10 +351,13 @@ function makeVideo(rv, p) {
     // reddit-hosted "gif" (soundless clip): behave like a gif — autoplay + loop
     video.loop = video.muted = video.autoplay = true;
     video.src = fixUrl(rv.fallback_url);
+    autoplayObs.observe(video);
     return video;
   }
   video.controls = true;
   video.preload = 'metadata';
+  bindStickyMute(video);
+  autoplayObs.observe(video);
   const poster = bestPreview(p);
   if (poster) video.poster = poster;
 
@@ -393,6 +405,60 @@ function makeGallery(urls) {
   if (urls.length > 1) g.append(prev, next);
   return g;
 }
+
+/* ---------------- Autoplay + sticky sound ---------------- */
+// Videos autoplay when mostly visible, pause when scrolled away.
+// Sound is one global preference: muted by default; unmuting any video
+// unmutes the ones that follow, muting one mutes the ones that follow.
+function soundOn() { return localStorage.getItem('soundOn') === '1'; }
+function setSoundOn(on) { localStorage.setItem('soundOn', on ? '1' : '0'); }
+
+function bindStickyMute(video) {
+  video.muted = !soundOn();
+  video.addEventListener('volumechange', () => setSoundOn(!video.muted));
+}
+
+function ytCommand(iframe, func) {
+  try {
+    iframe.contentWindow?.postMessage(
+      JSON.stringify({ event: 'command', func, args: [] }), '*');
+  } catch { }
+}
+
+const autoplayObs = new IntersectionObserver((entries) => {
+  for (const en of entries) {
+    const m = en.target;
+    if (m.tagName === 'VIDEO') {
+      if (en.intersectionRatio >= 0.6) m.play().catch(() => {});
+      else if (!m.paused) m.pause();
+    } else {
+      ytCommand(m, en.intersectionRatio >= 0.6 ? 'playVideo' : 'pauseVideo');
+    }
+  }
+}, { threshold: [0, 0.6] });   // viewport root: works in feed, side panel, and popup
+
+function teardownMedia(container) {
+  $$('video', container).forEach(v => {
+    v.pause();
+    v._hls?.destroy();
+    autoplayObs.unobserve(v);
+  });
+  $$('iframe', container).forEach(f => autoplayObs.unobserve(f));
+}
+
+// YouTube's player reports mute changes via the widget message channel —
+// mirror user (un)mutes inside the iframe into the global preference.
+window.addEventListener('message', (e) => {
+  if (typeof e.data !== 'string' || !/youtube/.test(e.origin || '')) return;
+  let d;
+  try { d = JSON.parse(e.data); } catch { return; }
+  const muted = d?.info?.muted;
+  if (typeof muted !== 'boolean') return;
+  const frame = $$('iframe').find(f => f.contentWindow === e.source);
+  if (!frame) return;
+  if (frame._lastMuted !== undefined && frame._lastMuted !== muted) setSoundOn(!muted);
+  frame._lastMuted = muted;
+});
 
 /* ---------------- Lightbox ---------------- */
 function openLightbox(src) {
@@ -521,8 +587,8 @@ function renderComment(c, opAuthor, depth) {
 function closeDetail() {
   overlay.classList.add('hidden');
   paneEl.classList.add('hidden');
-  $$('video', overlayContent).forEach(v => v.pause());
-  $$('video', paneContent).forEach(v => v.pause());
+  teardownMedia(overlayContent);
+  teardownMedia(paneContent);
   overlayContent.innerHTML = '';
   paneContent.innerHTML = '';
   if (selectedCard) {
