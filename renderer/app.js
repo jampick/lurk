@@ -303,7 +303,13 @@ function renderMedia(p) {
   if (/\.(jpe?g|png|webp)(\?|$)/i.test(url) || p.post_hint === 'image') {
     const img = el('img');
     img.loading = 'lazy';
-    img.src = bestPreview(p) || url;
+    const preview = bestPreview(p);
+    img.src = preview || url;
+    let triedRaw = !preview || preview === url;
+    img.onerror = () => {           // dead preview URL → retry original, then give up
+      if (!triedRaw) { triedRaw = true; img.src = url; }
+      else wrap.remove();
+    };
     img.onclick = () => openLightbox(fixUrl(p.url) || img.src);
     wrap.appendChild(img);
     return nsfwWrap(p, wrap);
@@ -323,7 +329,9 @@ function renderMedia(p) {
       img.style.cursor = 'pointer';
       img.onclick = openArticle;
       wrap.appendChild(img);
-      outer.appendChild(nsfwWrap(p, wrap));
+      const mediaNode = nsfwWrap(p, wrap);
+      img.onerror = () => mediaNode.remove();   // dead preview → just the link card
+      outer.appendChild(mediaNode);
     }
 
     const link = el('div', 'link-card');
@@ -350,9 +358,10 @@ function renderMedia(p) {
         img.src = src;
         img.style.cursor = 'pointer';
         img.onclick = openArticle;
-        img.onerror = () => mediaWrap.remove();
         mediaWrap.appendChild(img);
-        outer.insertBefore(nsfwWrap(p, mediaWrap), link);
+        const mediaNode = nsfwWrap(p, mediaWrap);
+        img.onerror = () => mediaNode.remove();
+        outer.insertBefore(mediaNode, link);
       });
     }
     return outer;
@@ -406,6 +415,7 @@ function makeGallery(urls) {
   let idx = 0;
   const img = el('img');
   img.loading = 'lazy';
+  img.onerror = () => g.parentElement?.remove();
   img.src = urls[0];
   img.onclick = () => openLightbox(urls[idx]);
   const count = el('span', 'gallery-count', `1 / ${urls.length}`);
