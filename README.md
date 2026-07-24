@@ -53,6 +53,10 @@ Installers are built automatically by CI for every tagged version.
 None are code-signed yet, so Windows SmartScreen / macOS Gatekeeper will ask you
 to confirm the first launch (macOS: right-click → Open).
 
+> **Pinning to the Windows taskbar:** pin the *installed* app (Start menu → Lurk).
+> Pinning a dev instance run via `npm start` pins `electron.exe` and shows
+> Electron's default icon instead of Lurk's.
+
 ## Run from source
 
 ```bash

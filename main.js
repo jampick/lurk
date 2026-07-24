@@ -77,9 +77,13 @@ async function redditFetch(url) {
 app.whenReady().then(() => {
   nativeTheme.themeSource = 'dark';
 
-  // No page in this app ever needs camera, mic, location, notifications, etc.
-  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => {
-    callback(false);
+  // Stable Windows identity for taskbar grouping/pinning (matches NSIS appId)
+  app.setAppUserModelId('com.oddjob.lurk');
+
+  // Fullscreen is the one permission pages legitimately use (video players).
+  // Everything else — camera, mic, location, notifications — stays denied.
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(permission === 'fullscreen');
   });
 
   // Reddit's HLS video streams don't send CORS headers, and our renderer runs

@@ -263,6 +263,7 @@ function renderMedia(p) {
     iframe.src = `https://www.youtube-nocookie.com/embed/${yt[1]}`
       + `?enablejsapi=1&playsinline=1&mute=${soundOn() ? 0 : 1}`;
     iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+    iframe.allowFullscreen = true;
     iframe.addEventListener('load', () => {
       try {
         iframe.contentWindow?.postMessage(JSON.stringify({ event: 'listening' }), '*');
