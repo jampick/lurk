@@ -39,7 +39,21 @@ opposite: a native-feeling window with no ads, no login, no tracking, no
 | --- | --- |
 | ![Feed](docs/feed.png) | ![Comments](docs/comments.png) |
 
-## Install & run
+## Download
+
+Grab the latest installer from **[Releases](https://github.com/jampick/lurk/releases)**:
+
+| OS | File |
+| --- | --- |
+| Windows | `Lurk Setup x.y.z.exe` (NSIS installer) |
+| macOS | `Lurk-x.y.z.dmg` |
+| Linux | `Lurk-x.y.z.AppImage` or `.deb` |
+
+Installers are built automatically by CI for every tagged version.
+None are code-signed yet, so Windows SmartScreen / macOS Gatekeeper will ask you
+to confirm the first launch (macOS: right-click → Open).
+
+## Run from source
 
 ```bash
 git clone https://github.com/jampick/lurk.git
@@ -48,18 +62,9 @@ npm install
 npm start
 ```
 
-Requires Node 20+. Works on **Windows** and **macOS** (same codebase; the titlebar
-adapts to each platform).
-
-### Build an installer
-
-```bash
-npm run dist
-```
-
-- On Windows this produces an NSIS installer in `dist/` — install it and pin Lurk
-  to your taskbar with its proper icon.
-- On a Mac it produces a `.dmg`. (Installers must be built on the OS they target.)
+Requires Node 20+. Same codebase on Windows, macOS, and Linux — the titlebar
+adapts per platform. `npm run dist` builds the installer for whichever OS
+you're on.
 
 ## How it works (the interesting bits)
 

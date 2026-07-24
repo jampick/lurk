@@ -32,6 +32,12 @@
     "mac": {
       "target": "dmg",
       "category": "public.app-category.news"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Network",
+      "icon": "build/icon.png",
+      "maintainer": "jampick <2190090+jampick@users.noreply.github.com>"
     }
   },
   "allowScripts": {
