@@ -173,6 +173,7 @@ new IntersectionObserver((entries) => {
 /* ---------------- Post rendering ---------------- */
 function renderPost(p) {
   const card = el('article', 'post-card');
+  if (readPosts.has(p.id)) card.classList.add('read');
 
   const head = el('div', 'post-head');
   const sub = el('span', 'post-sub', p.subreddit_name_prefixed);
@@ -416,6 +417,7 @@ function commentsMode() { return localStorage.getItem('commentsMode') || 'side';
 
 function openPost(p, card) {
   closeDetail();
+  markRead(p, card);
   if (card) {
     card.classList.add('selected');
     selectedCard = card;
@@ -687,6 +689,53 @@ $('#search-form').onsubmit = (e) => {
   $$('.side-item').forEach(i => i.classList.remove('active'));
   resetFeed();
 };
+
+/* ---------------- Zoom: Ctrl+wheel, Ctrl+=/-/0 ---------------- */
+const savedZoom = parseFloat(localStorage.getItem('zoomLevel'));
+if (!Number.isNaN(savedZoom)) window.lurk.setZoom(savedZoom);
+
+function zoom(dir) {
+  const z = window.lurk.zoomBy(dir);
+  localStorage.setItem('zoomLevel', z);
+}
+window.addEventListener('wheel', (e) => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  zoom(e.deltaY < 0 ? 0.5 : -0.5);
+}, { passive: false });
+document.addEventListener('keydown', (e) => {
+  if (!e.ctrlKey) return;
+  if (e.key === '=' || e.key === '+') { e.preventDefault(); zoom(0.5); }
+  else if (e.key === '-') { e.preventDefault(); zoom(-0.5); }
+  else if (e.key === '0') {
+    e.preventDefault();
+    window.lurk.setZoom(0);
+    localStorage.setItem('zoomLevel', 0);
+  }
+});
+
+/* ---------------- Read-post tracking ---------------- */
+const readPosts = new Set(JSON.parse(localStorage.getItem('readPosts') || '[]'));
+
+function markRead(p, card) {
+  if (!readPosts.has(p.id)) {
+    readPosts.add(p.id);
+    localStorage.setItem('readPosts', JSON.stringify([...readPosts].slice(-2000)));
+  }
+  if (card) card.classList.add('read');
+}
+
+const hideReadBtn = $('#hideread-toggle');
+function hideReadOn() { return localStorage.getItem('hideRead') === '1'; }
+function applyHideRead() {
+  feedEl.classList.toggle('hide-read', hideReadOn());
+  hideReadBtn.textContent = hideReadOn() ? '🙈 Read hidden' : '👁 Read shown';
+}
+hideReadBtn.onclick = () => {
+  localStorage.setItem('hideRead', hideReadOn() ? '0' : '1');
+  applyHideRead();
+};
+applyHideRead();
 
 /* ---------------- Boot ---------------- */
 renderSidebar();

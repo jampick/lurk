@@ -189,7 +189,7 @@ button, input, select {
   cursor: pointer;
 }
 #search-form { margin-left: auto; width: min(340px, 30vw); }
-#mode-toggle {
+#mode-toggle, #hideread-toggle {
   border: 1px solid var(--border);
   background: var(--bg-raised);
   color: var(--text-dim);
@@ -200,7 +200,18 @@ button, input, select {
   font-weight: 600;
   white-space: nowrap;
 }
-#mode-toggle:hover { border-color: var(--accent); color: var(--text); }
+#mode-toggle:hover, #hideread-toggle:hover { border-color: var(--accent); color: var(--text); }
+
+.post-card.read { opacity: 0.55; }
+.post-card.read:hover, .post-card.read.selected { opacity: 1; }
+#feed.hide-read .post-card.read:not(.selected) { display: none; }
+
+/* narrow windows: tighten chrome so the feed stays usable */
+@media (max-width: 900px) {
+  #sidebar { width: 170px; }
+  #search-form { display: none; }
+  #feed-title { max-width: 160px; }
+}
 
 /* ---------- Feed + side pane ---------- */
 #content-row {
