@@ -142,3 +142,50 @@ ipcMain.handle('reddit:fetch', async (_event, apiPath) => {
 ipcMain.handle('app:openExternal', (_event, url) => {
   if (typeof url === 'string' && /^https?:\/\//.test(url)) shell.openExternal(url);
 });
+
+/*
+ * og:image lookup for link posts Reddit gives no preview for.
+ * Fetches only the head of the article page (200 KB cap, 6 s timeout),
+ * extracts og:image / twitter:image, and caches the result.
+ */
+const ogCache = new Map();
+
+ipcMain.handle('article:previewImage', async (_event, url) => {
+  if (typeof url !== 'string' || !/^https?:\/\//.test(url)) return null;
+  if (ogCache.has(url)) return ogCache.get(url);
+
+  let result = null;
+  try {
+    const res = await net.fetch(url, {
+      signal: AbortSignal.timeout(6000),
+      headers: { 'Accept': 'text/html' }
+    });
+    const type = res.headers.get('content-type') || '';
+    if (res.ok && type.includes('text/html') && res.body) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let html = '';
+      while (html.length < 200_000) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        html += decoder.decode(value, { stream: true });
+        if (/<\/head>/i.test(html)) break;
+      }
+      reader.cancel().catch(() => {});
+
+      const tag = html.match(
+        /<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)(?::src)?["'][^>]*>/i)?.[0]
+        || html.match(
+        /<meta[^>]+content=["'][^"']+["'][^>]*(?:property|name)=["'](?:og:image|twitter:image)/i)?.[0];
+      const content = tag?.match(/content=["']([^"']+)["']/i)?.[1];
+      if (content) {
+        const abs = new URL(content.replace(/&amp;/g, '&'), url).href;
+        if (abs.startsWith('https://')) result = abs;   // CSP allows https images only
+      }
+    }
+  } catch { /* article host slow/unreachable — card just stays imageless */ }
+
+  if (ogCache.size > 500) ogCache.delete(ogCache.keys().next().value);
+  ogCache.set(url, result);
+  return result;
+});

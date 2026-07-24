@@ -338,6 +338,23 @@ function renderMedia(p) {
     link.appendChild(el('div', 'link-url', `${host} ↗`));
     link.onclick = openArticle;
     outer.appendChild(link);
+
+    // no reddit preview at all — ask the article itself for its og:image
+    if (!big) {
+      window.lurk.articlePreviewImage(p.url).then(src => {
+        if (!src || !outer.isConnected) return;
+        const mediaWrap = el('div', 'post-media');
+        const img = el('img');
+        img.loading = 'lazy';
+        img.referrerPolicy = 'no-referrer';
+        img.src = src;
+        img.style.cursor = 'pointer';
+        img.onclick = openArticle;
+        img.onerror = () => mediaWrap.remove();
+        mediaWrap.appendChild(img);
+        outer.insertBefore(nsfwWrap(p, mediaWrap), link);
+      });
+    }
     return outer;
   }
 
