@@ -580,13 +580,44 @@ async function renderDetail(container, p, { commentsOnly = false } = {}) {
     }
   }
 
-  container.appendChild(
-    el('div', 'comments-header', `${compact(p.num_comments)} comments`));
+  loadComments(container, p);
+}
+
+const COMMENT_SORTS = [
+  ['confidence', 'Best'], ['top', 'Top'], ['new', 'New'],
+  ['controversial', 'Controversial'], ['old', 'Old'], ['qa', 'Q&A']
+];
+function commentSort() { return localStorage.getItem('commentSort') || 'confidence'; }
+
+async function loadComments(container, p) {
+  // a sort change re-runs this: clear the previous comments render only
+  const old = container.querySelector('.comments-header');
+  if (old) {
+    while (old.nextSibling) old.nextSibling.remove();
+    old.remove();
+  }
+
+  const header = el('div', 'comments-header');
+  header.appendChild(el('span', 'comments-count', `${compact(p.num_comments)} comments`));
+  const sortSel = el('select', 'comment-sort');
+  for (const [value, label] of COMMENT_SORTS) {
+    const opt = el('option', null, label);
+    opt.value = value;
+    if (value === commentSort()) opt.selected = true;
+    sortSel.appendChild(opt);
+  }
+  sortSel.onchange = () => {
+    localStorage.setItem('commentSort', sortSel.value);
+    loadComments(container, p);
+  };
+  header.appendChild(sortSel);
+  container.appendChild(header);
+
   const spinner = el('div', 'spinner');
   container.appendChild(spinner);
 
   try {
-    const data = await api(`${p.permalink}.json?raw_json=1&limit=80&depth=6`);
+    const data = await api(`${p.permalink}.json?raw_json=1&limit=80&depth=6&sort=${commentSort()}`);
     spinner.remove();
     const comments = data?.[1]?.data?.children || [];
     const frag = document.createDocumentFragment();
@@ -933,14 +964,14 @@ async function pollLive() {
   let added = 0;
   let ok = false;
   try {
-    const data = await api(`${p.permalink}.json?raw_json=1&limit=80&depth=6`);
+    const data = await api(`${p.permalink}.json?raw_json=1&limit=80&depth=6&sort=${commentSort()}`);
     if (!live || live.post !== p) return;    // closed or switched mid-fetch
     ok = true;
     const fresh = data?.[0]?.data?.children?.[0]?.data;
     const comments = data?.[1]?.data?.children || [];
     if (fresh) {
-      const header = paneContent.querySelector('.comments-header');
-      if (header) header.textContent = `${compact(fresh.num_comments)} comments`;
+      const count = paneContent.querySelector('.comments-count');
+      if (count) count.textContent = `${compact(fresh.num_comments)} comments`;
       if (selectedCard) {
         const score = selectedCard.querySelector('.foot-score');
         if (score) score.textContent = `▲ ${compact(fresh.score)}`;
