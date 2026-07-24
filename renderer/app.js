@@ -400,6 +400,14 @@ function makeVideo(rv, p) {
     hls.loadSource(hlsUrl);
     hls.attachMedia(video);
     video._hls = hls;
+    // Pin the top variant: reddit's CMAF masters wire different video levels to
+    // DIFFERENT audio groups (128k vs 64k), and ABR switching between them
+    // garbles audio. One fixed level = one audio group = clean sound.
+    hls.on(Hls.Events.MANIFEST_PARSED, (_e, d) => {
+      let best = 0;
+      d.levels.forEach((l, i) => { if (l.bitrate > d.levels[best].bitrate) best = i; });
+      hls.currentLevel = best;
+    });
     video.addEventListener('play', () => hls.startLoad(), { once: true });
     hls.on(Hls.Events.ERROR, (_e, data) => {
       if (data.fatal) {             // HLS died — fall back to soundless mp4
