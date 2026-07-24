@@ -868,52 +868,98 @@ applyHideRead();
 let live = null;          // { post, unseen, timer }
 let lastOpenPost = null;
 
+const LIVE_INTERVAL = 30_000;
+
 const liveBtn = $('#live-toggle');
 function liveOn() { return localStorage.getItem('liveMode') !== '0'; }
+
+// The button doubles as the status display: countdown → checking… → result flash
 function updateLiveBtn() {
-  liveBtn.textContent = liveOn() ? '🔴 Live' : '⚪ Live';
-  liveBtn.classList.toggle('on', liveOn());
+  if (!liveOn()) {
+    liveBtn.textContent = '⚪ Live';
+    liveBtn.classList.remove('on');
+    return;
+  }
+  liveBtn.classList.add('on');
+  if (!live) { liveBtn.textContent = '🔴 Live'; return; }
+  if (live.busy) { liveBtn.textContent = '🔴 checking…'; return; }
+  if (Date.now() < live.flashUntil) { liveBtn.textContent = `🔴 ${live.flashText}`; return; }
+  const secs = Math.max(0, Math.ceil((live.nextAt - Date.now()) / 1000));
+  liveBtn.textContent = `🔴 ${secs}s`;
 }
 liveBtn.onclick = () => {
   localStorage.setItem('liveMode', liveOn() ? '0' : '1');
-  updateLiveBtn();
   if (liveOn() && lastOpenPost && !paneEl.classList.contains('hidden')) startLive(lastOpenPost);
   else stopLive();
+  updateLiveBtn();
 };
 updateLiveBtn();
 
 function startLive(p) {
   stopLive();
   if (!liveOn()) return;
-  live = { post: p, unseen: 0, timer: setInterval(pollLive, 30000) };
+  live = {
+    post: p,
+    unseen: 0,
+    busy: false,
+    nextAt: Date.now() + LIVE_INTERVAL,
+    flashText: '',
+    flashUntil: 0,
+    timer: setInterval(liveTick, 1000)
+  };
+  updateLiveBtn();
 }
 function stopLive() {
   if (live) { clearInterval(live.timer); live = null; }
   setBadge(0);
+  updateLiveBtn();
+}
+
+function liveTick() {
+  if (!live) return;
+  if (!live.busy && Date.now() >= live.nextAt) pollLive();
+  updateLiveBtn();
 }
 
 async function pollLive() {
-  if (!live || document.hidden || paneEl.classList.contains('hidden')) return;
-  const p = live.post;
-  let data;
-  try { data = await api(`${p.permalink}.json?raw_json=1&limit=80&depth=6`); } catch { return; }
-  if (!live || live.post !== p) return;      // closed or switched mid-fetch
-  const fresh = data?.[0]?.data?.children?.[0]?.data;
-  const comments = data?.[1]?.data?.children || [];
-  if (fresh) {
-    const header = paneContent.querySelector('.comments-header');
-    if (header) header.textContent = `${compact(fresh.num_comments)} comments`;
-    if (selectedCard) {
-      const score = selectedCard.querySelector('.foot-score');
-      if (score) score.textContent = `▲ ${compact(fresh.score)}`;
-      const btns = selectedCard.querySelectorAll('.foot-btn');
-      if (btns[1]) btns[1].textContent = `💬 ${compact(fresh.num_comments)}`;
-    }
+  if (!live) return;
+  if (document.hidden || paneEl.classList.contains('hidden')) {
+    live.nextAt = Date.now() + LIVE_INTERVAL;
+    return;
   }
-  const added = mergeComments(comments, paneContent, p.author, 0);
-  if (added > 0 && !document.hasFocus()) {
-    live.unseen += added;
-    setBadge(live.unseen);
+  const p = live.post;
+  live.busy = true;
+  updateLiveBtn();
+  let added = 0;
+  let ok = false;
+  try {
+    const data = await api(`${p.permalink}.json?raw_json=1&limit=80&depth=6`);
+    if (!live || live.post !== p) return;    // closed or switched mid-fetch
+    ok = true;
+    const fresh = data?.[0]?.data?.children?.[0]?.data;
+    const comments = data?.[1]?.data?.children || [];
+    if (fresh) {
+      const header = paneContent.querySelector('.comments-header');
+      if (header) header.textContent = `${compact(fresh.num_comments)} comments`;
+      if (selectedCard) {
+        const score = selectedCard.querySelector('.foot-score');
+        if (score) score.textContent = `▲ ${compact(fresh.score)}`;
+        const btns = selectedCard.querySelectorAll('.foot-btn');
+        if (btns[1]) btns[1].textContent = `💬 ${compact(fresh.num_comments)}`;
+      }
+    }
+    added = mergeComments(comments, paneContent, p.author, 0);
+    if (added > 0 && !document.hasFocus()) {
+      live.unseen += added;
+      setBadge(live.unseen);
+    }
+  } catch { /* transient network error — the flash says so */ }
+  if (live && live.post === p) {
+    live.busy = false;
+    live.nextAt = Date.now() + LIVE_INTERVAL;
+    live.flashText = ok ? (added > 0 ? `+${added} new` : 'no new') : 'retrying';
+    live.flashUntil = Date.now() + 3000;
+    updateLiveBtn();
   }
 }
 
