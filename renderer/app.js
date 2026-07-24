@@ -280,6 +280,7 @@ function renderMedia(p) {
     const v = el('video');
     v.src = url.replace(/\.gifv$/i, '.mp4');
     v.loop = v.muted = v.autoplay = v.playsInline = true;
+    v._silent = true;
     autoplayObs.observe(v);
     wrap.appendChild(v);
     return nsfwWrap(p, wrap);
@@ -291,6 +292,7 @@ function renderMedia(p) {
       const v = el('video');
       v.src = fixUrl(mp4);
       v.loop = v.muted = v.autoplay = v.playsInline = true;
+      v._silent = true;
       autoplayObs.observe(v);
       wrap.appendChild(v);
     } else {
@@ -378,6 +380,7 @@ function makeVideo(rv, p) {
   if (rv.is_gif) {
     // reddit-hosted "gif" (soundless clip): behave like a gif — autoplay + loop
     video.loop = video.muted = video.autoplay = true;
+    video._silent = true;
     video.src = fixUrl(rv.fallback_url);
     autoplayObs.observe(video);
     return video;
@@ -444,7 +447,11 @@ function setSoundOn(on) { localStorage.setItem('soundOn', on ? '1' : '0'); }
 
 function bindStickyMute(video) {
   video.muted = !soundOn();
-  video.addEventListener('volumechange', () => setSoundOn(!video.muted));
+  video.addEventListener('volumechange', () => {
+    setSoundOn(!video.muted);
+    if (!video.muted) reconcileAutoplay(video);   // unmuting claims the one audio slot
+  });
+  video.addEventListener('play', () => reconcileAutoplay(video));
 }
 
 function ytCommand(iframe, func) {
@@ -454,16 +461,58 @@ function ytCommand(iframe, func) {
   } catch { }
 }
 
+// Only ONE audible video plays at a time — the eligible one nearest the
+// viewport center — so overlapping soundtracks can't garble each other.
+// Silent gif-loop clips (v._silent) are exempt and autoplay freely.
+const audibleInView = new Set();
+
+function mediaPlay(m) {
+  if (m.tagName === 'VIDEO') m.play().catch(() => {});
+  else ytCommand(m, 'playVideo');
+}
+function mediaPause(m) {
+  if (m.tagName === 'VIDEO') { if (!m.paused) m.pause(); }
+  else ytCommand(m, 'pauseVideo');
+}
+
+function reconcileAutoplay(preferred) {
+  if (preferred && !audibleInView.has(preferred)) {
+    // user manually started something off-screen — silence the rest, let it play
+    for (const m of audibleInView) mediaPause(m);
+    return;
+  }
+  let winner = preferred || null;
+  if (!winner) {
+    let best = Infinity;
+    const mid = window.innerHeight / 2;
+    for (const m of audibleInView) {
+      const r = m.getBoundingClientRect();
+      const d = Math.abs((r.top + r.bottom) / 2 - mid);
+      if (d < best) { best = d; winner = m; }
+    }
+  }
+  for (const m of audibleInView) {
+    if (m === winner) mediaPlay(m);
+    else mediaPause(m);
+  }
+}
+
 const autoplayObs = new IntersectionObserver((entries) => {
   for (const en of entries) {
     const m = en.target;
-    if (m.tagName === 'VIDEO') {
-      if (en.intersectionRatio >= 0.6) m.play().catch(() => {});
-      else if (!m.paused) m.pause();
+    if (m._silent) {                       // soundless clip: simple visibility rule
+      if (en.intersectionRatio >= 0.6) mediaPlay(m);
+      else mediaPause(m);
+      continue;
+    }
+    if (en.intersectionRatio >= 0.6) {
+      audibleInView.add(m);
     } else {
-      ytCommand(m, en.intersectionRatio >= 0.6 ? 'playVideo' : 'pauseVideo');
+      audibleInView.delete(m);
+      mediaPause(m);
     }
   }
+  reconcileAutoplay();
 }, { threshold: [0, 0.6] });   // viewport root: works in feed, side panel, and popup
 
 function teardownMedia(container) {
@@ -471,8 +520,12 @@ function teardownMedia(container) {
     v.pause();
     v._hls?.destroy();
     autoplayObs.unobserve(v);
+    audibleInView.delete(v);
   });
-  $$('iframe', container).forEach(f => autoplayObs.unobserve(f));
+  $$('iframe', container).forEach(f => {
+    autoplayObs.unobserve(f);
+    audibleInView.delete(f);
+  });
 }
 
 // Embedding disabled by the uploader (101/150/152/153) — swap the dead
@@ -511,7 +564,10 @@ window.addEventListener('message', (e) => {
   if (typeof muted !== 'boolean') return;
   const frame = $$('iframe').find(f => f.contentWindow === e.source);
   if (!frame) return;
-  if (frame._lastMuted !== undefined && frame._lastMuted !== muted) setSoundOn(!muted);
+  if (frame._lastMuted !== undefined && frame._lastMuted !== muted) {
+    setSoundOn(!muted);
+    if (!muted) reconcileAutoplay(frame);   // unmuting claims the one audio slot
+  }
   frame._lastMuted = muted;
 });
 
