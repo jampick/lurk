@@ -192,8 +192,7 @@ function renderPost(p) {
   if (media) card.appendChild(media);
 
   if (p.selftext && !media) {
-    const st = el('div', 'post-selftext', decodeEntities(p.selftext).slice(0, 600));
-    card.appendChild(st);
+    card.appendChild(renderCardSelftext(p));
   }
 
   const foot = el('div', 'post-foot');
@@ -206,6 +205,48 @@ function renderPost(p) {
   card.appendChild(foot);
 
   return card;
+}
+
+/* Clamped selftext preview that expands in place to the full post body. */
+function renderCardSelftext(p) {
+  const wrap = el('div', 'post-selftext-wrap');
+  const st = el('div', 'post-selftext', decodeEntities(p.selftext).slice(0, 600));
+  const toggle = el('button', 'selftext-toggle', 'Read more');
+  toggle.hidden = true;
+  let expanded = false;
+
+  const setExpanded = (on) => {
+    expanded = on;
+    st.classList.toggle('expanded', on);
+    if (on) {
+      if (p.selftext_html) {
+        const body = redditHtml(p.selftext_html);
+        body.className = 'detail-selftext';
+        st.replaceChildren(body);
+      } else {
+        st.textContent = decodeEntities(p.selftext);
+      }
+      toggle.textContent = 'Show less';
+    } else {
+      st.textContent = decodeEntities(p.selftext).slice(0, 600);
+      toggle.textContent = 'Read more';
+    }
+    toggle.hidden = false;
+  };
+
+  // show the toggle only once the preview actually overflows its clamp
+  new ResizeObserver(() => {
+    if (!expanded) toggle.hidden = st.scrollHeight <= st.clientHeight + 2;
+  }).observe(st);
+
+  st.onclick = (e) => {
+    if (e.target.closest('a')) return;
+    if (!expanded && !toggle.hidden) setExpanded(true);
+  };
+  toggle.onclick = () => setExpanded(!expanded);
+
+  wrap.append(st, toggle);
+  return wrap;
 }
 
 /* ---------------- Media rendering ---------------- */

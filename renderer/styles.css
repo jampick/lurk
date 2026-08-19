@@ -477,6 +477,25 @@ button, input, select {
   mask-image: linear-gradient(to bottom, #000 60%, transparent);
   -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent);
 }
+.post-selftext:not(.expanded) { cursor: pointer; }
+.post-selftext.expanded {
+  max-height: none;
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+.post-selftext .detail-selftext { font-size: 13.5px; margin-bottom: 0; }
+.selftext-toggle {
+  display: block;
+  margin: -6px 0 0;
+  padding: 0 16px 12px;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.selftext-toggle:hover { text-decoration: underline; }
 
 .link-card {
   margin: 4px 16px 12px;
