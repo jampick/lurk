@@ -28,6 +28,8 @@ opposite: a native-feeling window with no ads, no login, no tracking, no
   to resize) or a popup overlay; one click toggles the mode
 - **Threaded comments** — collapse/expand any thread, OP highlighting, inline
   image previews for image links inside comments
+- **Full text posts inline** — long selftext expands in place with
+  *Read more / Show less*, fully formatted (paragraphs, links, quotes, code)
 - **Your subreddits** — pinned list with autocomplete search, saved locally
 - **Hot / New / Top / Rising** with time ranges, plus site-wide search
 - **NSFW blurred** until you click, external links open in your real browser
@@ -38,6 +40,10 @@ opposite: a native-feeling window with no ads, no login, no tracking, no
 | Feed | Comments side panel |
 | --- | --- |
 | ![Feed](docs/feed.png) | ![Comments](docs/comments.png) |
+
+Long text posts expand right in the feed — read the whole thing without leaving your place:
+
+![Read more](docs/readmore.png)
 
 ## Download
 
