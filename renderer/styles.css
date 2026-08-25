@@ -81,6 +81,10 @@ button, input, select {
   flex-direction: column;
   gap: 4px;
 }
+/* Collapsed hides the rail outright rather than shrinking it to icons: the
+   subreddit list is text, so an icon-only rail would have nothing to show. */
+#layout.sidebar-collapsed #sidebar { display: none; }
+
 .side-label {
   font-size: 11px;
   font-weight: 700;
@@ -207,6 +211,23 @@ button, input, select {
 }
 #mode-toggle:hover, #hideread-toggle:hover { border-color: var(--accent); color: var(--text); }
 
+#sidebar-toggle {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  /* Pull back most of #topbar's 18px gap: the toggle belongs against the feed
+     title, and the topbar has no width to spare on a narrow window. */
+  margin-right: -10px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-dim);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+#sidebar-toggle:hover { border-color: var(--accent); color: var(--text); }
+
 .post-card.read { opacity: 0.55; }
 .post-card.read:hover, .post-card.read.selected { opacity: 1; }
 #feed.hide-read .post-card.read:not(.selected) { display: none; }
@@ -216,6 +237,8 @@ button, input, select {
   #sidebar { width: 170px; }
   #search-form { display: none; }
   #feed-title { max-width: 160px; }
+  /* Buy back the room the sidebar toggle costs, so the feed title still fits. */
+  .sort-btn { padding: 6px 8px; }
 }
 
 /* ---------- Feed + side pane ---------- */

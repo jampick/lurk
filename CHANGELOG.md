@@ -9,6 +9,10 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 
 ## [Unreleased]
 
+### Added
+- The left sidebar collapses out of the way, from a button in the topbar or
+  with Ctrl+B. The choice is remembered between launches.
+
 ## [0.2.1] - 2026-08-25
 
 ### Fixed

@@ -49,6 +49,20 @@ test('the app shell renders', async () => {
   await expect(page.locator('.sort-btn')).toHaveCount(4);
 });
 
+test('the sidebar collapses and remembers the choice', async () => {
+  await expect(page.locator('#sidebar')).toBeVisible();
+
+  await page.locator('#sidebar-toggle').click();
+  await expect(page.locator('#sidebar')).toBeHidden();
+  await expect(page.locator('#sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
+  expect(await page.evaluate(() => localStorage.getItem('sidebarCollapsed'))).toBe('1');
+
+  // Ctrl+B is the other way in, and it has to agree with the button.
+  await page.keyboard.press('Control+b');
+  await expect(page.locator('#sidebar')).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('sidebarCollapsed'))).toBe('0');
+});
+
 test('the renderer boots without throwing', async () => {
   // The helper split across util.js / app.js fails exactly this way: a
   // ReferenceError at boot leaves a blank window and nothing else.
