@@ -30,6 +30,11 @@
         <input id="add-sub-input" type="text" placeholder="+ add subreddit" spellcheck="false" />
       </form>
       <div id="sub-suggestions"></div>
+
+      <div id="side-footer">
+        <button id="check-updates" type="button">Check for updates</button>
+        <span id="app-version"></span>
+      </div>
     </aside>
 
     <main id="main">
@@ -83,7 +88,16 @@
     </div>
   </div>
 
+  <!-- Update notice. Floats over the layout rather than living in the titlebar,
+       which is hidden entirely under a tiling WM (see omarchy.isTilingSession). -->
+  <div id="update-toast" class="hidden" role="status" aria-live="polite">
+    <span id="update-text"></span>
+    <button id="update-action" type="button" class="hidden"></button>
+    <button id="update-dismiss" type="button" title="Dismiss">✕</button>
+  </div>
+
   <script src="../node_modules/hls.js/dist/hls.min.js"></script>
+  <script src="util.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

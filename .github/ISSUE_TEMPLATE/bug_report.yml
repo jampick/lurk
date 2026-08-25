@@ -1,0 +1,70 @@
+name: Bug report
+description: Something in Lurk is broken or behaves unexpectedly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. The version and platform
+        fields matter more than they look — most Lurk bugs are platform-specific.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you get instead?
+      placeholder: |
+        Opening a gallery post shows only the first image. I expected to be able
+        to page through all of them.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open r/pics
+        2. Click a post with a gallery
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Lurk version
+      description: Shown at the bottom of the sidebar, e.g. v0.1.1
+      placeholder: v0.1.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows
+        - macOS
+        - "Linux: AppImage"
+        - "Linux: deb (Debian/Ubuntu)"
+        - "Linux: pacman (Arch/Omarchy)"
+        - Running from source
+    validations:
+      required: true
+
+  - type: input
+    id: desktop
+    attributes:
+      label: Desktop environment (Linux only)
+      description: Helps with titlebar and theming bugs.
+      placeholder: Hyprland / Omarchy, GNOME 46, KDE 6 …
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Errors from the developer console
+      description: >
+        Optional but very helpful. Open with Ctrl+Shift+I (Cmd+Option+I on
+        macOS) and copy anything red from the Console tab.
+      render: text

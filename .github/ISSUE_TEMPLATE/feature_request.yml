@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest something Lurk should be able to do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: >
+        Describe the situation rather than the solution — it often turns out
+        there is a simpler way to solve it than the one that comes to mind first.
+      placeholder: |
+        I follow about 40 subreddits and the sidebar list has got long enough
+        that I scroll past the ones I actually read.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Lurk to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you have tried or considered instead?
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This would change how existing settings or data behave
+        - label: I would be willing to work on this

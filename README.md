@@ -49,15 +49,34 @@ Long text posts expand right in the feed — read the whole thing without leavin
 
 Grab the latest installer from **[Releases](https://github.com/jampick/lurk/releases)**:
 
-| OS | File |
-| --- | --- |
-| Windows | `Lurk Setup x.y.z.exe` (NSIS installer) |
-| macOS | `Lurk-x.y.z.dmg` |
-| Linux | `Lurk-x.y.z.AppImage` or `.deb` |
+| OS | File | Auto-updates |
+| --- | --- | --- |
+| Windows | `Lurk Setup x.y.z.exe` (NSIS installer) | Yes |
+| Linux (any distro) | `Lurk-x.y.z.AppImage` | Yes |
+| Linux (Debian/Ubuntu) | `.deb` | Notified in app |
+| Linux (Arch/Omarchy) | `.pacman` | Notified in app |
+| macOS | `Lurk-x.y.z.dmg` | Notified in app |
 
 Installers are built automatically by CI for every tagged version.
 None are code-signed yet, so Windows SmartScreen / macOS Gatekeeper will ask you
 to confirm the first launch (macOS: right-click → Open).
+
+### Staying up to date
+
+Lurk checks GitHub for new releases shortly after launch and every few hours
+after that. When one turns up you get a desktop notification and a banner in
+the corner of the window.
+
+On **Windows** and the **Linux AppImage**, the update downloads itself in the
+background and the banner offers a **Restart** button — that's the whole
+process. On macOS and `.deb`/`.pacman` installs, Lurk tells you and links to the
+download; those formats are managed by the system (or, on macOS, blocked from
+self-updating until the app is signed), so it doesn't try to update behind your
+back.
+
+On Arch or Omarchy, take the **AppImage** if you want updates to arrive on their
+own. There's a **Check for updates** button at the bottom of the sidebar, next
+to the version number, and updates are off entirely when running from source.
 
 > **Pinning to the Windows taskbar:** pin the *installed* app (Start menu → Lurk).
 > Pinning a dev instance run via `npm start` pins `electron.exe` and shows
@@ -75,6 +94,15 @@ npm start
 Requires Node 20+. Same codebase on Windows, macOS, and Linux — the titlebar
 adapts per platform. `npm run dist` builds the installer for whichever OS
 you're on.
+
+```bash
+npm test           # lint + unit tests
+npm run test:e2e   # launches the real app and smoke-tests it
+```
+
+Patches welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the issue → PR →
+auto-merge flow, [docs/VERSIONING.md](docs/VERSIONING.md) for the versioning
+scheme, and [RELEASING.md](RELEASING.md) for how releases are cut.
 
 ## How it works (the interesting bits)
 
@@ -98,10 +126,12 @@ you're on.
 - The only IPC surface is "fetch this reddit.com path" and "open this http(s) URL
   in the system browser", both validated in the main process
 - All permission requests (camera, mic, location, …) are denied
-- Dependencies: `electron` + `hls.js`, `npm audit` clean
+- Dependencies: `electron`, `hls.js` and `electron-updater`, `npm audit` clean
 
 ## Roadmap
 
+- [x] Automatic update notifications
+- [ ] Code signing (Windows SmartScreen, macOS auto-update)
 - [ ] Keyboard navigation (j/k through posts)
 - [ ] Optional Reddit login for your real home feed
 - [ ] Multi-column grid layout

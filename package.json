@@ -4,17 +4,32 @@
   "version": "0.1.1",
   "description": "A fast, modern, media-first Reddit viewer for desktop",
   "main": "main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jampick/lurk.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder"
+    "lint": "node scripts/lint.mjs",
+    "test": "npm run lint && npm run test:unit",
+    "test:unit": "node --test \"test/unit/**/*.test.js\"",
+    "test:e2e": "playwright test",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "release": "node scripts/release.mjs"
   },
   "author": "OddJob",
   "license": "MIT",
   "devDependencies": {
+    "@playwright/test": "^1.50.0",
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
+    "electron-updater": "^6.3.9",
     "hls.js": "^1.5.13"
   },
   "build": {
@@ -24,21 +39,45 @@
       "main.js",
       "preload.js",
       "omarchy.js",
+      "lib/**/*",
       "renderer/**/*",
       "node_modules/hls.js/dist/hls.min.js"
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "jampick",
+        "repo": "lurk",
+        "releaseType": "draft"
+      }
+    ],
     "win": {
       "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
     },
     "mac": {
       "target": "dmg",
       "category": "public.app-category.news"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb",
+        "pacman"
+      ],
       "category": "Network",
       "icon": "build/icon.png",
-      "maintainer": "jampick <2190090+jampick@users.noreply.github.com>"
+      "maintainer": "jampick <2190090+jampick@users.noreply.github.com>",
+      "synopsis": "Media-first Reddit viewer",
+      "desktop": {
+        "entry": {
+          "StartupWMClass": "Lurk"
+        }
+      }
     }
   },
   "allowScripts": {

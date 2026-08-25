@@ -1,0 +1,62 @@
+name: PR hygiene
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  issue-link:
+    name: Linked issue
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a linked issue
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          # Every change is supposed to be traceable to an issue. `no-issue` is
+          # the deliberate exception — use it for typo fixes and the like.
+          if [[ ",$LABELS," == *",no-issue,"* ]]; then
+            echo "Labelled no-issue — skipping."
+            exit 0
+          fi
+
+          if echo "$TITLE $BODY" | grep -qiE '(#[0-9]+|(closes|fixes|resolves|refs|part of)[[:space:]]+#[0-9]+)'; then
+            echo "Found an issue reference."
+            exit 0
+          fi
+
+          echo "::error::This PR references no issue."
+          echo ""
+          echo "Add one to the description, e.g. 'Closes #12'."
+          echo "If this genuinely does not need an issue, add the 'no-issue' label."
+          exit 1
+
+  title:
+    name: Conventional title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the PR title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # PR titles become squash-commit subjects, which is what the release
+          # notes are generated from — so the format is enforced here.
+          PATTERN='^(feat|fix|perf|refactor|docs|test|build|ci|chore|revert)(\([a-z0-9,/-]+\))?!?: .{3,}'
+          if echo "$TITLE" | grep -qE "$PATTERN"; then
+            echo "OK: $TITLE"
+            exit 0
+          fi
+          echo "::error::PR title must follow Conventional Commits."
+          echo ""
+          echo "  Got:      $TITLE"
+          echo "  Expected: <type>(<optional scope>): <description>"
+          echo "  Types:    feat, fix, perf, refactor, docs, test, build, ci, chore, revert"
+          echo ""
+          echo "  Examples: feat(updates): notify when a new version is available"
+          echo "            fix(comments): stop the live poll leaking a timer"
+          exit 1

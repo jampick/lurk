@@ -1,0 +1,52 @@
+# Changelog
+
+All notable changes to Lurk are documented here.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and Lurk adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+See [docs/VERSIONING.md](docs/VERSIONING.md) for what counts as a breaking
+change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
+
+## [Unreleased]
+
+### Added
+- Automatic update checks against GitHub Releases, with a desktop notification
+  and an in-app banner when a new version is available. Windows (NSIS) and Linux
+  (AppImage) install updates in place; macOS and `.deb`/`.pacman` installs are
+  told about the update and linked to the download page (#22).
+- "Check for updates" button and the running version in the sidebar footer.
+- Test suite: unit tests on `node:test` plus a Playwright smoke test that
+  launches the real Electron app (#22).
+- Continuous integration on every pull request, with auto-merge once checks pass (#22).
+- Issue forms, a pull request template, and a contributing guide.
+- Linux `pacman` package target, alongside AppImage and deb.
+
+### Changed
+- Pure helpers moved out of `renderer/app.js` into `renderer/util.js` and `lib/`
+  so they can be unit tested.
+- `reddit:fetch` now validates the requested path against a stricter allowlist.
+
+### Fixed
+- An anchor with an empty `href` in Reddit-supplied HTML no longer turns into a
+  link to the Reddit homepage; the href is stripped as intended.
+
+## [0.1.1] - 2026-08-24
+
+### Added
+- Omarchy theme integration: Lurk follows the desktop theme and retints live.
+- Live post mode with auto-refreshing comments and a taskbar badge.
+- Comment sorting: Best, Top, New, Controversial, Old, Q&A.
+
+### Fixed
+- HLS playback pinned to the top variant to stabilise audio.
+- Only one video plays audibly at a time.
+
+## [0.1.0] - 2026-07-24
+
+### Added
+- First release: media-first Reddit feed, comments panel, subreddit sidebar,
+  search, infinite scroll, and Windows/macOS/Linux packages.
+
+[Unreleased]: https://github.com/jampick/lurk/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/jampick/lurk/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/jampick/lurk/releases/tag/v0.1.0
