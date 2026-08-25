@@ -794,6 +794,38 @@ modeBtn.onclick = () => {
 };
 updateModeButton();
 
+/* ---------------- Sidebar collapse ---------------- */
+// Ctrl+B is the shortcut every editor already uses for this, and the button
+// stays in the topbar rather than the titlebar because a tiling WM hides the
+// titlebar entirely (see omarchy.isTilingSession).
+const layoutEl = $('#layout');
+const sidebarBtn = $('#sidebar-toggle');
+
+function sidebarCollapsed() { return localStorage.getItem('sidebarCollapsed') === '1'; }
+
+function applySidebar() {
+  const off = sidebarCollapsed();
+  layoutEl.classList.toggle('sidebar-collapsed', off);
+  sidebarBtn.textContent = off ? '\u00bb' : '\u00ab';
+  sidebarBtn.title = (off ? 'Show sidebar' : 'Collapse sidebar') + ' (Ctrl+B)';
+  sidebarBtn.setAttribute('aria-label', sidebarBtn.title);
+  sidebarBtn.setAttribute('aria-expanded', String(!off));
+}
+
+function toggleSidebar() {
+  localStorage.setItem('sidebarCollapsed', sidebarCollapsed() ? '0' : '1');
+  applySidebar();
+}
+
+sidebarBtn.onclick = toggleSidebar;
+document.addEventListener('keydown', (e) => {
+  if (!e.ctrlKey || e.altKey || e.metaKey) return;
+  if (e.key !== 'b' && e.key !== 'B') return;
+  e.preventDefault();
+  toggleSidebar();
+});
+applySidebar();
+
 /* ---------------- Sidebar: my subreddits ---------------- */
 const DEFAULT_SUBS = ['pics', 'videos', 'aww', 'technology', 'worldnews', 'gaming', 'movies'];
 
