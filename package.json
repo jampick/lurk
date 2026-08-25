@@ -73,11 +73,8 @@
       "icon": "build/icon.png",
       "maintainer": "jampick <2190090+jampick@users.noreply.github.com>",
       "synopsis": "Media-first Reddit viewer",
-      "desktop": {
-        "entry": {
-          "StartupWMClass": "Lurk"
-        }
-      }
+      "desktopName": "lurk.desktop",
+      "syncDesktopName": true
     }
   },
   "allowScripts": {
