@@ -91,6 +91,12 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # fpm shells out to bsdtar to build the pacman package's .MTREE, and it is
+      # not present on GitHub's Ubuntu image — without this the pacman target
+      # fails with exit code 127.
+      - name: Install pacman packaging prerequisites
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+
       # Builds the real Linux targets, not just --dir. AppImage/deb/pacman each
       # have their own tooling, and a target that only gets exercised at release
       # time is a target that breaks at release time.
