@@ -86,12 +86,12 @@ test('Linux ships an AppImage, the only Linux format that can self-update', () =
   assert.ok(pkg.build.linux.target.includes('AppImage'));
 });
 
-test('the Linux desktop entry name is set for tiling window managers', () => {
+test('the Linux desktop entry name is synced for tiling window managers', () => {
   // Hyprland matches window rules and resolves the icon from app_id, which has
-  // to agree with the installed .desktop filename. Without these, Lurk shows a
-  // generic icon on Omarchy and windowrule entries do not match.
-  assert.equal(pkg.build.linux.desktopName, 'lurk.desktop');
+  // to agree with the installed .desktop filename. syncDesktopName derives that
+  // filename from executableName, so both have to be set.
   assert.equal(pkg.build.linux.syncDesktopName, true);
+  assert.equal(pkg.build.linux.executableName, 'lurk');
 });
 
 test('every platform has a build target', () => {
