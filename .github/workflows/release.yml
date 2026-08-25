@@ -71,6 +71,13 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # fpm needs bsdtar to build the pacman package's .MTREE and it is not on
+      # GitHub's Ubuntu image. Without it the Linux build fails, which blocks
+      # the publish job and leaves the release stuck as a draft.
+      - name: Install pacman packaging prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+
       # Each matrix job uploads its artifacts into the same draft release.
       # The release stays a draft until the publish job below flips it, so a
       # half-built release is never visible to the auto-updater.
