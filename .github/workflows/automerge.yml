@@ -1,0 +1,30 @@
+name: Auto-merge
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable:
+    name: Enable auto-merge
+    # Draft PRs are work in progress, and `do-not-merge` is the explicit escape
+    # hatch for a PR that should wait for a human even though CI is green.
+    if: >-
+      github.event.pull_request.draft == false &&
+      !contains(github.event.pull_request.labels.*.name, 'do-not-merge')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Turn on auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        # This does not merge anything now — it asks GitHub to merge the PR the
+        # moment the required status checks pass and reviews are satisfied.
+        # Branch protection is what actually enforces "tests must pass first".
+        run: |
+          gh pr merge "$PR" --auto --squash --repo "$GITHUB_REPOSITORY" \
+            || echo "::notice::Could not enable auto-merge (already merged, or blocked by branch rules)."

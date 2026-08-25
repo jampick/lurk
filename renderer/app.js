@@ -25,22 +25,11 @@ const decodeEntities = (() => {
   return (s) => { ta.innerHTML = s || ''; return ta.value; };
 })();
 
-const fixUrl = (u) => (u || '').replace(/&amp;/g, '&');
-
-function timeAgo(utc) {
-  const s = Math.max(1, Math.floor(Date.now() / 1000 - utc));
-  const units = [[31536000, 'y'], [2592000, 'mo'], [86400, 'd'], [3600, 'h'], [60, 'm']];
-  for (const [sec, label] of units) {
-    if (s >= sec) return Math.floor(s / sec) + label;
-  }
-  return s + 's';
-}
-
-function compact(n) {
-  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
-  if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
-  return String(n);
-}
+/*
+ * fixUrl, timeAgo, compact, safeHref, imageUrlFor, bestPreview and feedPath all
+ * live in util.js — pure enough to unit test, so they are loaded from there
+ * (as globals) by both index.html and the test suite.
+ */
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -56,13 +45,12 @@ function redditHtml(escapedHtml) {
   const div = el('div');
   div.innerHTML = decodeEntities(escapedHtml);
   $$('a', div).forEach(a => {
-    let abs = null;
-    try { abs = new URL(a.getAttribute('href') || '', 'https://www.reddit.com'); } catch { }
-    if (!abs || (abs.protocol !== 'https:' && abs.protocol !== 'http:')) {
+    const href = safeHref(a.getAttribute('href'));
+    if (!href) {
       a.removeAttribute('href');
       return;
     }
-    a.href = abs.href;
+    a.href = href;
     a.target = '_blank';           // window-open handler routes to system browser
     a.rel = 'noreferrer noopener';
   });
@@ -70,19 +58,6 @@ function redditHtml(escapedHtml) {
 }
 
 /* ---- inline images for links inside comments ---- */
-function imageUrlFor(href) {
-  let u;
-  try { u = new URL(href); } catch { return null; }
-  if (u.protocol !== 'https:') return null;
-  if (/\.(jpe?g|png|gif|webp)$/i.test(u.pathname)) return u.href;
-  // giphy page links → direct gif
-  if (u.hostname.endsWith('giphy.com')) {
-    const m = u.pathname.match(/^\/gifs\/(?:[\w-]*-)?(\w+)\/?$/);
-    if (m) return `https://media.giphy.com/media/${m[1]}/giphy.gif`;
-  }
-  return null;
-}
-
 function inlineCommentImages(body) {
   let count = 0;
   for (const a of $$('a[href]', body)) {
@@ -111,25 +86,13 @@ async function api(path) {
 }
 
 /* ---------------- Feed loading ---------------- */
-function feedPath() {
-  const limit = 'limit=25&raw_json=1';
-  const after = state.after ? `&after=${state.after}` : '';
-  if (state.feed.startsWith('search:')) {
-    const q = encodeURIComponent(state.feed.slice(7));
-    return `/search.json?q=${q}&sort=relevance&${limit}${after}`;
-  }
-  const base = state.feed ? `/${state.feed}` : '';
-  const t = state.sort === 'top' ? `&t=${state.topTime}` : '';
-  return `${base}/${state.sort}.json?${limit}${t}${after}`;
-}
-
 async function loadMore() {
   if (state.loading || state.exhausted) return;
   state.loading = true;
   statusEl.innerHTML = '';
   statusEl.appendChild(el('div', 'spinner'));
   try {
-    const data = await api(feedPath());
+    const data = await api(feedPath(state));
     const children = data?.data?.children || [];
     state.after = data?.data?.after || null;
     if (!state.after) state.exhausted = true;
@@ -250,14 +213,6 @@ function renderCardSelftext(p) {
 }
 
 /* ---------------- Media rendering ---------------- */
-function bestPreview(p) {
-  const imgs = p.preview?.images?.[0];
-  if (!imgs) return null;
-  const candidates = [...(imgs.resolutions || []), imgs.source].filter(Boolean);
-  const pick = candidates.find(r => r.width >= 960) || candidates[candidates.length - 1];
-  return pick ? fixUrl(pick.url) : null;
-}
-
 function nsfwWrap(p, mediaEl) {
   if (!p.over_18) return mediaEl;
   const wrap = el('div', 'media-blur');
@@ -1157,6 +1112,109 @@ window.addEventListener('focus', () => {
   setBadge(0);
 });
 
+/* ---------------- Updates ---------------- */
+/*
+ * Mirrors the main process's updater state (lib/updater.js). Three shapes the
+ * user actually sees:
+ *
+ *   downloading       progress, no action — it is happening on its own
+ *   downloaded        "Restart" — auto-update platforms (Windows, AppImage)
+ *   available-manual  "Download" — macOS and .deb/.pacman, which can't self-update
+ *
+ * A dismissal is remembered per version so a background re-check every few
+ * hours doesn't re-nag about a release the user already waved off.
+ */
+const updateToast = $('#update-toast');
+const updateText = $('#update-text');
+const updateAction = $('#update-action');
+const versionEl = $('#app-version');
+const checkBtn = $('#check-updates');
+
+function dismissedVersion() { return localStorage.getItem('updateDismissed'); }
+function dismissVersion(v) { if (v) localStorage.setItem('updateDismissed', v); }
+
+function hideToast() { updateToast.classList.add('hidden'); }
+
+function showToast(text, actionLabel, onAction) {
+  updateText.textContent = text;
+  if (actionLabel) {
+    updateAction.textContent = actionLabel;
+    updateAction.classList.remove('hidden');
+    updateAction.onclick = onAction;
+  } else {
+    updateAction.classList.add('hidden');
+    updateAction.onclick = null;
+  }
+  updateToast.classList.remove('hidden');
+}
+
+let lastUpdateState = null;
+
+function renderUpdate(st) {
+  if (!st) return;
+  lastUpdateState = st;
+  if (st.current) versionEl.textContent = `v${st.current}`;
+
+  switch (st.status) {
+    case 'downloading':
+      if (dismissedVersion() === st.version) return hideToast();
+      showToast(
+        st.percent != null
+          ? `Downloading Lurk ${st.version || ''} — ${st.percent}%`
+          : `Downloading Lurk ${st.version || ''}…`,
+        null, null);
+      break;
+
+    case 'downloaded':
+      // Deliberately ignores a prior dismissal: the bits are already on disk
+      // and the only thing left is a restart, so it is worth one more ask.
+      showToast(`Lurk ${st.version} is ready to install`,
+        'Restart', () => window.lurk.updates.install());
+      break;
+
+    case 'available-manual':
+      if (dismissedVersion() === st.version) return hideToast();
+      showToast(`Lurk ${st.version} is available`,
+        'Download', () => window.lurk.updates.openReleasePage());
+      break;
+
+    default:
+      hideToast();
+  }
+}
+
+$('#update-dismiss').onclick = () => {
+  dismissVersion(lastUpdateState?.version);
+  hideToast();
+};
+
+/* Manual check — the button reports its own result, since a background check
+   that finds nothing is otherwise completely silent. */
+async function manualCheck() {
+  checkBtn.disabled = true;
+  const original = 'Check for updates';
+  checkBtn.textContent = 'Checking…';
+  try {
+    const st = await window.lurk.updates.check();
+    renderUpdate(st);
+    if (st?.status === 'current') checkBtn.textContent = "You're up to date";
+    else if (st?.status === 'disabled') checkBtn.textContent = 'Updates off in dev';
+    else if (st?.status === 'error') checkBtn.textContent = 'Check failed';
+    else checkBtn.textContent = original;
+  } catch {
+    checkBtn.textContent = 'Check failed';
+  }
+  setTimeout(() => { checkBtn.textContent = original; checkBtn.disabled = false; }, 3000);
+}
+
+function initUpdates() {
+  if (!window.lurk?.updates) return;      // older preload; fail quiet
+  checkBtn.onclick = manualCheck;
+  window.lurk.updates.onState(renderUpdate);
+  window.lurk.updates.getState().then(renderUpdate);
+}
+
 /* ---------------- Boot ---------------- */
 renderSidebar();
 setFeed('', 'Frontpage');
+initUpdates();

@@ -1,6 +1,9 @@
 const { app, BrowserWindow, ipcMain, net, nativeImage, session, shell, nativeTheme } = require('electron');
 const path = require('path');
 const omarchy = require('./omarchy');
+const { extractOgImage } = require('./lib/og');
+const { isSafeApiPath } = require('./lib/reddit-path');
+const { createUpdater } = require('./lib/updater');
 
 function createWindow() {
   // Linux has no titleBarStyle/titleBarOverlay support — `frame: false` is the
@@ -60,7 +63,19 @@ function createWindow() {
  */
 let warmupPromise = null;
 
+/** Push an event to every live window, including ones opened after startup. */
+function broadcast(channel, payload) {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send(channel, payload);
+  }
+}
+
+let updater = null;
+
 function warmCookies() {
+  // The e2e suite asserts on the app shell, not on Reddit's contents; skipping
+  // the warm-up keeps it hermetic and saves ~3s per run.
+  if (process.env.LURK_E2E) return Promise.resolve();
   if (warmupPromise) return warmupPromise;
   warmupPromise = (async () => {
     const win = new BrowserWindow({
@@ -143,12 +158,12 @@ app.whenReady().then(() => {
 
   // Re-push the palette whenever the desktop theme changes. Broadcasting covers
   // windows opened later by `activate`.
-  const stopWatchingTheme = omarchy.watchTheme((css) => {
-    for (const w of BrowserWindow.getAllWindows()) {
-      if (!w.isDestroyed()) w.webContents.send('omarchy:theme', css);
-    }
-  });
+  const stopWatchingTheme = omarchy.watchTheme((css) => broadcast('omarchy:theme', css));
   app.on('will-quit', stopWatchingTheme);
+
+  updater = createUpdater({ app, broadcast });
+  updater.start();
+  app.on('will-quit', () => updater.stop());
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -172,7 +187,7 @@ ipcMain.on('omarchy:init', (event) => {
 });
 
 ipcMain.handle('reddit:fetch', async (_event, apiPath) => {
-  if (typeof apiPath !== 'string' || !apiPath.startsWith('/')) {
+  if (!isSafeApiPath(apiPath)) {
     return { ok: false, error: 'Bad request path' };
   }
   const url = 'https://www.reddit.com' + apiPath;
@@ -240,15 +255,7 @@ ipcMain.handle('article:previewImage', async (_event, url) => {
       }
       reader.cancel().catch(() => {});
 
-      const tag = html.match(
-        /<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)(?::src)?["'][^>]*>/i)?.[0]
-        || html.match(
-        /<meta[^>]+content=["'][^"']+["'][^>]*(?:property|name)=["'](?:og:image|twitter:image)/i)?.[0];
-      const content = tag?.match(/content=["']([^"']+)["']/i)?.[1];
-      if (content) {
-        const abs = new URL(content.replace(/&amp;/g, '&'), url).href;
-        if (abs.startsWith('https://')) result = abs;   // CSP allows https images only
-      }
+      result = extractOgImage(html, url);
     }
   } catch { /* article host slow/unreachable — card just stays imageless */ }
 
@@ -256,3 +263,15 @@ ipcMain.handle('article:previewImage', async (_event, url) => {
   ogCache.set(url, result);
   return result;
 });
+
+/* ---------------- Updates ---------------- */
+
+ipcMain.handle('update:state', () => updater?.getState() ?? { mode: 'disabled', status: 'disabled' });
+
+ipcMain.handle('update:check', () => updater?.check({ manual: true }));
+
+// Either restarts into the new build (auto mode) or opens the release page
+// (notify mode) — the renderer's one button, whichever platform it lands on.
+ipcMain.handle('update:install', () => updater?.install());
+
+ipcMain.handle('update:openReleasePage', () => updater?.openReleasePage());

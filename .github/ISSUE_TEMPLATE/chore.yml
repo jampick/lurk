@@ -1,0 +1,32 @@
+name: Chore / maintenance
+description: Build, CI, dependencies, refactoring, docs
+labels: ["chore"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs doing?
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why now?
+      description: What is it blocking, or what breaks if it is left alone?
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Build / packaging
+        - CI
+        - Dependencies
+        - Auto-update
+        - Documentation
+        - Refactoring
+        - Tests
+        - Other
+    validations:
+      required: true

@@ -26,6 +26,13 @@ applyTheme(desktop.css);
 
 ipcRenderer.on('omarchy:theme', (_event, css) => applyTheme(css));
 
+// Update state arrives unprompted (background checks), so the renderer
+// subscribes rather than polling.
+const updateListeners = new Set();
+ipcRenderer.on('update:state', (_event, state) => {
+  for (const fn of updateListeners) fn(state);
+});
+
 contextBridge.exposeInMainWorld('lurk', {
   fetchReddit: (apiPath) => ipcRenderer.invoke('reddit:fetch', apiPath),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
@@ -37,5 +44,16 @@ contextBridge.exposeInMainWorld('lurk', {
     return z;
   },
   setZoom: (z) => webFrame.setZoomLevel(Math.max(-3, Math.min(6, z))),
-  platform: process.platform
+  platform: process.platform,
+
+  updates: {
+    getState: () => ipcRenderer.invoke('update:state'),
+    check: () => ipcRenderer.invoke('update:check'),
+    install: () => ipcRenderer.invoke('update:install'),
+    openReleasePage: () => ipcRenderer.invoke('update:openReleasePage'),
+    onState: (fn) => {
+      updateListeners.add(fn);
+      return () => updateListeners.delete(fn);
+    }
+  }
 });
