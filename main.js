@@ -1,20 +1,32 @@
 const { app, BrowserWindow, ipcMain, net, nativeImage, session, shell, nativeTheme } = require('electron');
 const path = require('path');
+const omarchy = require('./omarchy');
 
 function createWindow() {
+  // Linux has no titleBarStyle/titleBarOverlay support — `frame: false` is the
+  // equivalent, and the renderer draws its own bar (except under a tiling WM,
+  // which draws one for us; see omarchy.isTilingSession).
+  const chrome = process.platform === 'linux'
+    ? { frame: false }
+    : {
+        titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+        titleBarOverlay: {
+          color: '#0e0f13',
+          symbolColor: '#9aa0ae',
+          height: 40
+        }
+      };
+
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 760,
     minHeight: 520,
     backgroundColor: '#0e0f13',
-    icon: path.join(__dirname, 'build', 'icon.ico'),
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
-    titleBarOverlay: {
-      color: '#0e0f13',
-      symbolColor: '#9aa0ae',
-      height: 40
-    },
+    // .ico is a Windows format; every other platform needs the PNG.
+    icon: path.join(__dirname, 'build',
+      process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    ...chrome,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -129,6 +141,15 @@ app.whenReady().then(() => {
   warmCookies();
   createWindow();
 
+  // Re-push the palette whenever the desktop theme changes. Broadcasting covers
+  // windows opened later by `activate`.
+  const stopWatchingTheme = omarchy.watchTheme((css) => {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('omarchy:theme', css);
+    }
+  });
+  app.on('will-quit', stopWatchingTheme);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -136,6 +157,18 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+/*
+ * Synchronous on purpose: the preload calls this before the document loads so
+ * the themed palette and the titlebar decision are applied in the first style
+ * pass. An async round trip would paint Lurk's own colours first and flash.
+ */
+ipcMain.on('omarchy:init', (event) => {
+  event.returnValue = {
+    hideTitlebar: omarchy.isTilingSession(),
+    css: omarchy.readThemeCss()
+  };
 });
 
 ipcMain.handle('reddit:fetch', async (_event, apiPath) => {

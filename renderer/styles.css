@@ -9,6 +9,11 @@
   --accent: #7c6cff;
   --accent-soft: rgba(124, 108, 255, 0.14);
   --up: #ff8a5c;
+  --border-hover: #333a4a;
+  --scrollbar: #2b2f3b;
+  --scrollbar-hover: #3a4050;
+  --danger: #ff6b6b;
+  --danger-soft: rgba(255, 107, 107, 0.1);
   --radius: 12px;
   --titlebar-h: 40px;
 }
@@ -20,14 +25,14 @@ html, body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, "SF Pro Text", system-ui, sans-serif;
+  font-family: system-ui, "Segoe UI Variable Text", "Segoe UI", -apple-system, "SF Pro Text", sans-serif;
   font-size: 14.5px;
   line-height: 1.45;
 }
 
 ::-webkit-scrollbar { width: 10px; }
-::-webkit-scrollbar-thumb { background: #2b2f3b; border-radius: 5px; border: 2px solid var(--bg); }
-::-webkit-scrollbar-thumb:hover { background: #3a4050; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 5px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
 
 button, input, select {
   font: inherit;
@@ -115,7 +120,7 @@ button, input, select {
   visibility: hidden;
 }
 .side-item:hover .side-remove { visibility: visible; }
-.side-remove:hover { color: #ff6b6b; background: rgba(255, 107, 107, 0.1); }
+.side-remove:hover { color: var(--danger); background: var(--danger-soft); }
 
 #add-sub-form { padding: 8px 4px 2px; }
 #add-sub-input, #search-input {
@@ -332,7 +337,7 @@ button, input, select {
   overflow: hidden;
   transition: border-color 0.15s;
 }
-.post-card:hover { border-color: #333a4a; }
+.post-card:hover { border-color: var(--border-hover); }
 
 .post-head {
   display: flex;

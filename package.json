@@ -23,6 +23,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "omarchy.js",
       "renderer/**/*",
       "node_modules/hls.js/dist/hls.min.js"
     ],
