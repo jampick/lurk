@@ -9,6 +9,8 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-25
+
 ### Added
 - The left sidebar collapses out of the way, from a button in the topbar or
   with Ctrl+B. The choice is remembered between launches.
@@ -69,7 +71,8 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 - First release: media-first Reddit feed, comments panel, subreddit sidebar,
   search, infinite scroll, and Windows/macOS/Linux packages.
 
-[Unreleased]: https://github.com/jampick/lurk/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/jampick/lurk/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jampick/lurk/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/jampick/lurk/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/jampick/lurk/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jampick/lurk/compare/v0.1.0...v0.1.1
