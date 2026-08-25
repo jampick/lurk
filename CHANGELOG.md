@@ -9,6 +9,15 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 
 ## [Unreleased]
 
+### Fixed
+- Release builds no longer fail on macOS when code-signing secrets are not
+  configured. An unset secret arrives as an empty string, which electron-builder
+  treated as a file path — so the macOS installer was never produced (#29).
+
+### Changed
+- CI actions updated to `checkout@v5` and `setup-node@v5`, clearing the Node 20
+  deprecation warning on every run (#31).
+
 ## [0.2.0] - 2026-08-25
 
 ### Added
