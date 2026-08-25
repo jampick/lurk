@@ -86,6 +86,14 @@ test('Linux ships an AppImage, the only Linux format that can self-update', () =
   assert.ok(pkg.build.linux.target.includes('AppImage'));
 });
 
+test('the Linux desktop entry name is synced for tiling window managers', () => {
+  // Hyprland matches window rules and resolves the icon from app_id, which has
+  // to agree with the installed .desktop filename. syncDesktopName derives that
+  // filename from executableName, so both have to be set.
+  assert.equal(pkg.build.linux.syncDesktopName, true);
+  assert.equal(pkg.build.linux.executableName, 'lurk');
+});
+
 test('every platform has a build target', () => {
   for (const platform of ['win', 'mac', 'linux']) {
     assert.ok(pkg.build[platform]?.target, `no build target for ${platform}`);

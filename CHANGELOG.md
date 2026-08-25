@@ -16,7 +16,9 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
   told about the update and linked to the download page (#22).
 - "Check for updates" button and the running version in the sidebar footer.
 - Test suite: unit tests on `node:test` plus a Playwright smoke test that
-  launches the real Electron app (#22).
+  launches the real Electron app (#22). The electron-builder config is
+  validated against its own schema in-process, so a bad `build` key fails in
+  `npm test` rather than partway through a release build.
 - Continuous integration on every pull request, with auto-merge once checks pass (#22).
 - Issue forms, a pull request template, and a contributing guide.
 - Linux `pacman` package target, alongside AppImage and deb.
@@ -29,6 +31,9 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 ### Fixed
 - An anchor with an empty `href` in Reddit-supplied HTML no longer turns into a
   link to the Reddit homepage; the href is stripped as intended.
+- Linux builds now set a desktop entry name, so tiling window managers such as
+  Hyprland associate Lurk's window with its launcher entry — fixing a generic
+  window icon and `windowrule` entries that failed to match (#27).
 
 ## [0.1.1] - 2026-08-24
 
