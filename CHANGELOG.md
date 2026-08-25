@@ -9,6 +9,8 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-25
+
 ### Fixed
 - Release builds no longer fail on macOS when code-signing secrets are not
   configured. An unset secret arrives as an empty string, which electron-builder
@@ -63,7 +65,8 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 - First release: media-first Reddit feed, comments panel, subreddit sidebar,
   search, infinite scroll, and Windows/macOS/Linux packages.
 
-[Unreleased]: https://github.com/jampick/lurk/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jampick/lurk/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/jampick/lurk/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/jampick/lurk/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jampick/lurk/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jampick/lurk/releases/tag/v0.1.0
