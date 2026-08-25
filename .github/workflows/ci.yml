@@ -90,10 +90,30 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Build unpacked app
-        run: npx electron-builder --dir --linux
+
+      # Builds the real Linux targets, not just --dir. AppImage/deb/pacman each
+      # have their own tooling, and a target that only gets exercised at release
+      # time is a target that breaks at release time.
+      - name: Build Linux packages
+        run: npx electron-builder --linux --publish never
+
       - name: Verify the packaged app contains what main.js requires
         run: node scripts/verify-package.mjs
+
+      - name: Verify every configured Linux artifact was produced
+        run: |
+          cd dist
+          ls -la
+          for ext in AppImage deb pacman; do
+            if ! ls *."$ext" >/dev/null 2>&1; then
+              echo "::error::no .$ext artifact was produced"
+              exit 1
+            fi
+          done
+          # The AppImage is the only Linux format that can self-update, so its
+          # update manifest has to exist or Omarchy/Arch users get nothing.
+          test -f latest-linux.yml || { echo "::error::latest-linux.yml missing"; exit 1; }
+          echo "All Linux artifacts and the update manifest are present."
 
   # Single required status check, so branch protection has one stable name to
   # point at no matter how the matrix above changes.
