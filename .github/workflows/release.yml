@@ -82,7 +82,16 @@ jobs:
       # The release stays a draft until the publish job below flips it, so a
       # half-built release is never visible to the auto-updater.
       - name: Build and upload installers
-        run: npx electron-builder --publish always
+        shell: bash
+        run: |
+          # GitHub substitutes an empty string for an unconfigured secret rather
+          # than omitting the variable, and an empty CSC_LINK is worse than an
+          # absent one: electron-builder resolves it as a path and dies with
+          # "not a file". Unset the empty ones so unsigned builds work.
+          for var in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!var}" ]; then unset "$var"; fi
+          done
+          npx electron-builder --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Signing secrets are optional. When they are absent electron-builder
