@@ -9,6 +9,23 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 
 ## [Unreleased]
 
+### Fixed
+- Installing Lurk on Arch no longer breaks system updates. The pacman package
+  was named `lurk`, which collides with an unrelated package of the same name
+  in Arch's `extra` repo, so every later `pacman -Syu` aborted with a file
+  conflict on `/usr/bin/lurk` and no packages were upgraded at all. The pacman
+  package is now `lurk-reddit`. The command is still `lurk` and the install
+  prefix is still `/opt/Lurk` (#35).
+- Arch installs no longer need `--assume-installed http-parser`. That
+  dependency came from electron-builder's defaults and no longer exists in the
+  Arch repos, so a plain `pacman -U` failed on it (#35).
+
+### Upgrading on Arch
+- If you installed Lurk 0.3.0 or earlier, remove the old package before
+  installing this one: `sudo pacman -R lurk && sudo pacman -U lurk-*.pacman`.
+  The rename means pacman does not treat it as an upgrade. Your settings are
+  unaffected.
+
 ## [0.3.0] - 2026-08-25
 
 ### Added
