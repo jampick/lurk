@@ -213,6 +213,36 @@ function renderCardSelftext(p) {
 }
 
 /* ---------------- Media rendering ---------------- */
+/*
+ * Reddit's preview URLs are signed and expire, so in a long session previews
+ * start 403ing. Deleting the media block when that happened collapsed the card
+ * and yanked the feed out from under the reader — up to 640px per block, which
+ * left the feed oscillating and unscrollable (issue #37).
+ *
+ * Two rules keep the layout still: reserve the height Reddit already reported
+ * before the image loads, and mark a failed image dead in place instead of
+ * removing it. A dead block keeps its reserved box, so nothing below it moves.
+ */
+function reserveBox(img, box) {
+  if (box) img.style.aspectRatio = `${box.width} / ${box.height}`;
+}
+
+function failMedia(img) {
+  const block = img.closest('.post-media');
+  if (!block) {
+    img.remove();             // nothing reserving space — removing shifts nothing
+    return;
+  }
+  // Posts Reddit reports no preview dimensions for have no reserved box, so an
+  // image that loaded and then expired would still collapse to nothing. Pin the
+  // height it currently occupies before marking it dead.
+  if (!img.style.aspectRatio) {
+    const h = img.getBoundingClientRect().height;
+    if (h > 0) block.style.height = `${Math.round(h)}px`;
+  }
+  block.classList.add('dead');
+}
+
 function nsfwWrap(p, mediaEl) {
   if (!p.over_18) return mediaEl;
   const wrap = el('div', 'media-blur');
@@ -303,12 +333,14 @@ function renderMedia(p) {
   if (/\.(jpe?g|png|webp)(\?|$)/i.test(url) || p.post_hint === 'image') {
     const img = el('img');
     img.loading = 'lazy';
-    const preview = bestPreview(p);
+    const box = previewBox(p);
+    const preview = box ? box.url : bestPreview(p);
+    reserveBox(img, box);
     img.src = preview || url;
     let triedRaw = !preview || preview === url;
     img.onerror = () => {           // dead preview URL → retry original, then give up
       if (!triedRaw) { triedRaw = true; img.src = url; }
-      else wrap.remove();
+      else failMedia(img);
     };
     img.onclick = () => openLightbox(fixUrl(p.url) || img.src);
     wrap.appendChild(img);
@@ -320,17 +352,19 @@ function renderMedia(p) {
     const outer = el('div');
     const openArticle = () => window.lurk.openExternal(p.url);
 
-    const big = bestPreview(p);
+    const bigBox = previewBox(p);
+    const big = bigBox ? bigBox.url : bestPreview(p);
     const thumb = /^https?:/.test(p.thumbnail || '') ? fixUrl(p.thumbnail) : null;
     if (big) {
       const img = el('img');
       img.loading = 'lazy';
+      reserveBox(img, bigBox);
       img.src = big;
       img.style.cursor = 'pointer';
       img.onclick = openArticle;
       wrap.appendChild(img);
       const mediaNode = nsfwWrap(p, wrap);
-      img.onerror = () => mediaNode.remove();   // dead preview → just the link card
+      img.onerror = () => failMedia(img);       // dead preview → placeholder, not a reflow
       outer.appendChild(mediaNode);
     }
 
@@ -360,7 +394,7 @@ function renderMedia(p) {
         img.onclick = openArticle;
         mediaWrap.appendChild(img);
         const mediaNode = nsfwWrap(p, mediaWrap);
-        img.onerror = () => mediaNode.remove();
+        img.onerror = () => failMedia(img);
         outer.insertBefore(mediaNode, link);
       });
     }
@@ -424,7 +458,7 @@ function makeGallery(urls) {
   let idx = 0;
   const img = el('img');
   img.loading = 'lazy';
-  img.onerror = () => g.parentElement?.remove();
+  img.onerror = () => failMedia(img);
   img.src = urls[0];
   img.onclick = () => openLightbox(urls[idx]);
   const count = el('span', 'gallery-count', `1 / ${urls.length}`);

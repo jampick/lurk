@@ -122,6 +122,39 @@ test('the reddit fetch channel rejects an unsafe path', async () => {
   expect(res.error).toBe('Bad request path');
 });
 
+test('an expired preview keeps its media box instead of collapsing the card', async () => {
+  // Regression test for issue #37: removing the block when a signed preview URL
+  // expired collapsed the card mid-scroll and left the feed unscrollable.
+  const r = await page.evaluate(async () => {
+    const dead = 'data:image/png;base64,!!';   // fails instantly, no network
+    const feed = document.querySelector('#feed');
+    feed.innerHTML = '';
+    const card = window.renderPost({
+      id: 'expired', subreddit: 'pics', subreddit_name_prefixed: 'r/pics',
+      author: 'a', created_utc: Math.floor(Date.now() / 1000) - 60,
+      title: 'expired preview', post_hint: 'image', url: dead,
+      permalink: '/r/pics/expired/', score: 1, num_comments: 0,
+      preview: { images: [{ resolutions: [], source: { url: dead, width: 1000, height: 500 } }] }
+    });
+    feed.appendChild(card);
+    const img = card.querySelector('.post-media img');
+    const reserved = img.style.aspectRatio;
+    await new Promise((r) => setTimeout(r, 600));
+    const block = card.querySelector('.post-media');
+    return {
+      reserved,
+      kept: !!block,
+      dead: !!block && block.classList.contains('dead'),
+      height: Math.round(block ? block.getBoundingClientRect().height : 0)
+    };
+  });
+
+  expect(r.reserved).toBe('1000 / 500');   // box reserved before the image loads
+  expect(r.kept).toBe(true);               // block survives the failure
+  expect(r.dead).toBe(true);               // and is marked, not deleted
+  expect(r.height).toBeGreaterThan(0);     // still occupying its reserved height
+});
+
 test('the renderer logs no unexpected console errors', async () => {
   // Network failures are legitimate here (the feed can't load with the
   // warm-up skipped); anything else is a real defect.

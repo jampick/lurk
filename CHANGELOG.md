@@ -9,6 +9,16 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 
 ## [Unreleased]
 
+### Fixed
+- The feed no longer bounces and locks up after a long session. Reddit's preview
+  URLs are signed and expire, and once they did, each failed image deleted its
+  media block — up to 640px vanishing out of the feed above the reader. The
+  scroll position was yanked on every removal and never settled, so images
+  jittered and scrolling to new posts became impossible. Media boxes now reserve
+  the height Reddit reports before the image loads, and an image that fails is
+  marked unavailable in place instead of being removed, so nothing below it ever
+  moves (#37).
+
 ## [0.3.1] - 2026-08-26
 
 ### Fixed
