@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  fixUrl, timeAgo, compact, safeHref, imageUrlFor, bestPreview, feedPath
+  fixUrl, timeAgo, compact, safeHref, imageUrlFor, bestPreview, previewBox, feedPath
 } = require('../../renderer/util.js');
 
 test('fixUrl undoes Reddit double-escaped ampersands', () => {
@@ -175,4 +175,35 @@ test('feedPath output is always accepted by the main-process validator', () => {
   for (const st of states) {
     assert.ok(isSafeApiPath(feedPath(st)), `rejected: ${feedPath(st)}`);
   }
+});
+
+test('previewBox reports the chosen preview with its dimensions', () => {
+  const post = {
+    preview: {
+      images: [{
+        resolutions: [
+          { url: 'https://p/320', width: 320, height: 240 },
+          { url: 'https://p/1080', width: 1080, height: 810 }
+        ],
+        source: { url: 'https://p/source', width: 4000, height: 3000 }
+      }]
+    }
+  };
+  assert.deepEqual(previewBox(post),
+    { url: 'https://p/1080', width: 1080, height: 810 });
+});
+
+test('previewBox undoes double-escaped ampersands like bestPreview does', () => {
+  const post = {
+    preview: {
+      images: [{ resolutions: [], source: { url: 'https://p/s?a=1&amp;b=2', width: 1000, height: 500 } }]
+    }
+  };
+  assert.equal(previewBox(post).url, 'https://p/s?a=1&b=2');
+});
+
+test('previewBox returns null when Reddit gives no usable dimensions', () => {
+  assert.equal(previewBox({}), null);
+  assert.equal(previewBox({ preview: { images: [{ resolutions: [], source: { url: 'https://p/s' } }] } }), null);
+  assert.equal(previewBox({ preview: { images: [{ resolutions: [], source: { url: 'https://p/s', width: 0, height: 0 } }] } }), null);
 });

@@ -428,6 +428,27 @@ button, input, select {
   aspect-ratio: 16 / 9;
   border: none;
 }
+/*
+ * A preview whose signed URL has expired keeps its reserved box rather than
+ * being removed, so the feed underneath never moves (issue #37).
+ */
+.post-media.dead {
+  position: relative;
+  background: var(--bg-hover);
+  min-height: 2px;
+}
+.post-media.dead > * { visibility: hidden; }
+.post-media.dead::after {
+  content: "Image unavailable";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
 .media-blur img { filter: blur(40px); }
 .media-blur { position: relative; cursor: pointer; overflow: hidden; }
 .media-blur::after {

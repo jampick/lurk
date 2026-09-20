@@ -68,12 +68,28 @@
   }
 
   // Largest preview at or above 960px wide, else the biggest one Reddit offers.
-  function bestPreview(p) {
+  function previewPick(p) {
     const imgs = p?.preview?.images?.[0];
     if (!imgs) return null;
     const candidates = [...(imgs.resolutions || []), imgs.source].filter(Boolean);
-    const pick = candidates.find(r => r.width >= 960) || candidates[candidates.length - 1];
+    return candidates.find(r => r.width >= 960) || candidates[candidates.length - 1] || null;
+  }
+
+  function bestPreview(p) {
+    const pick = previewPick(p);
     return pick ? fixUrl(pick.url) : null;
+  }
+
+  /*
+   * The chosen preview plus the dimensions Reddit reports for it, so the media
+   * box can reserve its final height before the image loads — and keep that
+   * height if the image never arrives. A preview URL that has expired must not
+   * be able to collapse a card out from under the reader (issue #37).
+   */
+  function previewBox(p) {
+    const pick = previewPick(p);
+    if (!pick || !(pick.width > 0) || !(pick.height > 0)) return null;
+    return { url: fixUrl(pick.url), width: pick.width, height: pick.height };
   }
 
   // Build the .json API path for the current feed/sort/pagination state.
@@ -89,5 +105,5 @@
     return `${base}/${state.sort}.json?${limit}${t}${after}`;
   }
 
-  return { fixUrl, timeAgo, compact, safeHref, imageUrlFor, bestPreview, feedPath };
+  return { fixUrl, timeAgo, compact, safeHref, imageUrlFor, bestPreview, previewBox, feedPath };
 });
