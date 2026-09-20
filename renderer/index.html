@@ -2,8 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <!-- worker-src blob: is for hls.js, which builds its demuxer worker from a
+       blob URL. Without it script-src is used as the fallback, the worker is
+       blocked, and hls.js demuxes on the main thread instead (#40). -->
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline';
+                 worker-src blob:;
                  img-src 'self' file: https: data:; media-src https: blob:;
                  connect-src https://v.redd.it https://*.redd.it;
                  frame-src https://www.youtube-nocookie.com https://player.vimeo.com;
