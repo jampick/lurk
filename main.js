@@ -4,6 +4,13 @@ const omarchy = require('./omarchy');
 const { extractOgImage } = require('./lib/og');
 const { isSafeApiPath } = require('./lib/reddit-path');
 const { createUpdater } = require('./lib/updater');
+const { needsVideoDecodeWorkaround } = require('./lib/gpu-workarounds');
+
+// Has to run before the app is ready: Chromium reads its command line while
+// the GPU process is being spun up. See lib/gpu-workarounds for why (#39).
+if (needsVideoDecodeWorkaround({ platform: process.platform, env: process.env })) {
+  app.commandLine.appendSwitch('disable-accelerated-video-decode');
+}
 
 function createWindow() {
   // Linux has no titleBarStyle/titleBarOverlay support — `frame: false` is the
