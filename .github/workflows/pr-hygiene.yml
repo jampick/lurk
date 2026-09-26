@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   issue-link:
@@ -59,4 +60,48 @@ jobs:
           echo ""
           echo "  Examples: feat(updates): notify when a new version is available"
           echo "            fix(comments): stop the live poll leaking a timer"
+          exit 1
+
+  changelog:
+    name: Changelog entry
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a CHANGELOG entry for user-facing changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TITLE: ${{ github.event.pull_request.title }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          # `npm run release` refuses to cut a version whose [Unreleased]
+          # section is empty, which is the right guard at the wrong moment:
+          # #41 merged without an entry and the gap only surfaced when v0.3.3
+          # had to ship as a hotfix (#44). Catch it here instead, while the
+          # author still remembers what the change does.
+          #
+          # Only the user-facing types are held to this. ci/docs/chore and the
+          # rest skip it, and `no-changelog` is the escape hatch for a fix
+          # nobody outside the repo would notice.
+          if [[ ",$LABELS," == *",no-changelog,"* ]]; then
+            echo "Labelled no-changelog, skipping."
+            exit 0
+          fi
+
+          if ! echo "$TITLE" | grep -qE '^(feat|fix|perf)(\([a-z0-9,/-]+\))?!?: '; then
+            echo "Not a feat/fix/perf PR, no entry needed."
+            exit 0
+          fi
+
+          FILES="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename')"
+          if echo "$FILES" | grep -qx 'CHANGELOG.md'; then
+            echo "CHANGELOG.md is in the diff."
+            exit 0
+          fi
+
+          echo "::error::This PR changes something users will notice but does not touch CHANGELOG.md."
+          echo ""
+          echo "Add a line under '## [Unreleased]' saying what changed and why, in the"
+          echo "same voice as the entries already there. The release notes are built"
+          echo "from that section, and the release script refuses to run on an empty one."
+          echo "If this change is invisible to users, add the 'no-changelog' label."
           exit 1
