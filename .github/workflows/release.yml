@@ -55,6 +55,25 @@ jobs:
       - run: npm run test:unit
       - run: xvfb-run --auto-servernum npm run test:e2e
 
+      # Create the draft here, once, before the build matrix fans out. Each
+      # build job runs `electron-builder --publish always`, which looks for a
+      # draft for this version and creates one when it finds none. On v0.3.3
+      # the three jobs started in the same second, none of them saw another's
+      # draft, and each made its own; the publish job then flipped only one and
+      # the Windows and macOS files were stranded in drafts (#42). With the
+      # draft already here, electron-builder only ever finds it.
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --json isDraft >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists; leaving it alone."
+          else
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+              --title "Lurk ${{ steps.version.outputs.version }}" \
+              --notes "Build in progress."
+          fi
+
   build:
     name: Build (${{ matrix.os }})
     needs: verify
@@ -121,6 +140,33 @@ jobs:
       - name: Generate release notes
         run: node scripts/release-notes.mjs "${{ needs.verify.outputs.version }}" > notes.md
 
+      # Nothing is flipped to published until the draft is whole. A published
+      # release missing a manifest is the worst outcome: every job green, the
+      # release marked latest, and installs on that platform never see it.
+      - name: Check the draft is complete
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COUNT="$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+            --jq "[.[] | select(.tag_name == \"$GITHUB_REF_NAME\")] | length")"
+          if [ "$COUNT" != "1" ]; then
+            echo "::error::Expected exactly one release for $GITHUB_REF_NAME, found $COUNT. The build jobs uploaded into different drafts; see #42."
+            exit 1
+          fi
+
+          # electron-updater reads these; without them a published release is
+          # invisible to every installed copy of the app.
+          ASSETS="$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')"
+          echo "$ASSETS"
+          MISSING=0
+          for manifest in latest.yml latest-linux.yml latest-mac.yml; do
+            if ! echo "$ASSETS" | grep -qx "$manifest"; then
+              echo "::error::$manifest is missing from the draft; clients on that platform would never see this release"
+              MISSING=1
+            fi
+          done
+          [ "$MISSING" = 0 ] || exit 1
+
       - name: Publish the draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -131,17 +177,3 @@ jobs:
             --prerelease="${{ needs.verify.outputs.prerelease }}" \
             --title "Lurk ${{ needs.verify.outputs.version }}" \
             --notes-file notes.md
-
-      - name: Confirm the update manifests published
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # electron-updater reads these; without them a published release is
-          # invisible to every installed copy of the app.
-          ASSETS="$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')"
-          echo "$ASSETS"
-          for manifest in latest.yml latest-linux.yml latest-mac.yml; do
-            if ! echo "$ASSETS" | grep -qx "$manifest"; then
-              echo "::warning::$manifest is missing — clients on that platform will not see this release"
-            fi
-          done

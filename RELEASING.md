@@ -25,17 +25,28 @@ Which of patch/minor/major to use: [docs/VERSIONING.md](docs/VERSIONING.md).
 
 `.github/workflows/release.yml`, in three stages:
 
-1. **Verify** — tag matches `package.json`, CHANGELOG has a section for the
-   version, then lint + unit + smoke tests. Nothing is built until this passes.
-2. **Build** — Windows, macOS and Linux runners each build their installers and
-   upload them into the *same draft* GitHub release.
-3. **Publish** — generates the release notes and flips the draft to published.
+1. **Verify**: the tag matches `package.json`, the CHANGELOG has a section
+   for the version, then lint + unit + smoke tests. Once those pass it creates
+   the draft GitHub release. Nothing is built until this job is green.
+2. **Build**: Windows, macOS and Linux runners each build their installers and
+   upload them into that draft.
+3. **Publish**: checks there is exactly one release for the tag and that all
+   three `latest*.yml` manifests are on it, generates the release notes, and
+   flips the draft to published. A missing manifest fails the job and leaves
+   the draft unpublished.
 
 The draft-until-complete order is deliberate. electron-builder writes the
 `latest*.yml` manifests that the auto-updater reads, and a release published
 before every platform has uploaded would advertise an update whose file does
 not exist yet. Publishing last means installed copies never see a partial
 release.
+
+The draft is created in `verify` rather than left to electron-builder because
+`electron-builder --publish always` creates one itself when it finds none, and
+the three build jobs start within the same second. On v0.3.3 each job made its
+own draft, the publish job flipped the Linux one, and the Windows and macOS
+files sat in two drafts nobody could see (#42). The assets were moved by hand
+that time; the workflow now refuses to publish in that state.
 
 > The `v0.1.0` release sat as an unpublished draft for exactly this reason —
 > the old workflow had no publish step, so nothing ever went live and no
