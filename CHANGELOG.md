@@ -9,6 +9,11 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 
 ## [Unreleased]
 
+### Added
+- Omarchy packaging: a `lurk-reddit-bin` recipe under `packaging/omarchy/`
+  that repackages the release `.deb` for Omarchy's package repo, so Lurk can be
+  installed from Install → Package and updated with `pacman -Syu`. (#46)
+
 ## [0.3.3] - 2026-09-26
 
 ### Fixed

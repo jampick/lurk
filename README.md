@@ -54,7 +54,8 @@ Grab the latest installer from **[Releases](https://github.com/jampick/lurk/rele
 | Windows | `Lurk Setup x.y.z.exe` (NSIS installer) | Yes |
 | Linux (any distro) | `Lurk-x.y.z.AppImage` | Yes |
 | Linux (Debian/Ubuntu) | `.deb` | Notified in app |
-| Linux (Arch/Omarchy) | `.pacman` | Notified in app |
+| Linux (Omarchy) | `lurk-reddit-bin` from the Omarchy package repo | With `pacman -Syu` |
+| Linux (other Arch) | `.pacman` | Notified in app |
 | macOS | `Lurk-x.y.z.dmg` | Notified in app |
 
 Installers are built automatically by CI for every tagged version.
@@ -74,9 +75,13 @@ download; those formats are managed by the system (or, on macOS, blocked from
 self-updating until the app is signed), so it doesn't try to update behind your
 back.
 
-On Arch or Omarchy, take the **AppImage** if you want updates to arrive on their
-own. There's a **Check for updates** button at the bottom of the sidebar, next
-to the version number, and updates are off entirely when running from source.
+On Omarchy, install `lurk-reddit-bin` from the Install → Package menu (or
+`sudo pacman -S lurk-reddit-bin`) and it updates with the rest of the system;
+the recipe is in [packaging/omarchy](packaging/omarchy/README.md), and #46
+tracks its arrival in the Omarchy repo. On other Arch setups, take the
+**AppImage** if you want updates to arrive on their own. There's a **Check for
+updates** button at the bottom of the sidebar, next to the version number, and
+updates are off entirely when running from source.
 
 > **Pinning to the Windows taskbar:** pin the *installed* app (Start menu → Lurk).
 > Pinning a dev instance run via `npm start` pins `electron.exe` and shows
