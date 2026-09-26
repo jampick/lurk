@@ -9,6 +9,8 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-09-26
+
 ### Fixed
 - Linux machines with an NVIDIA card next to an integrated GPU, running under
   Wayland, no longer freeze once a video plays. Chromium's GPU process could
@@ -117,7 +119,8 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 - First release: media-first Reddit feed, comments panel, subreddit sidebar,
   search, infinite scroll, and Windows/macOS/Linux packages.
 
-[Unreleased]: https://github.com/jampick/lurk/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/jampick/lurk/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/jampick/lurk/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/jampick/lurk/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/jampick/lurk/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/jampick/lurk/compare/v0.2.1...v0.3.0
