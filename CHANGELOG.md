@@ -9,6 +9,21 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 
 ## [Unreleased]
 
+### Fixed
+- Linux machines with an NVIDIA card next to an integrated GPU, running under
+  Wayland, no longer freeze once a video plays. Chromium's GPU process could
+  not import decoded video frames (`eglCreateImage failed with 0x00003009`,
+  EGL_BAD_MATCH), and from then on the window stopped receiving fresh tiles:
+  the feed would not scroll, images rendered malformed and the comments panel
+  looked like it was flickering in and out. It reads as a hang, but only
+  presentation is broken. Hardware video decode is now turned off on exactly
+  that combination (Linux, Wayland, NVIDIA driver loaded); every other setup
+  keeps it. `LURK_VIDEO_ACCEL=0` or `LURK_VIDEO_ACCEL=1` forces the choice
+  either way (#39).
+- The renderer's Content Security Policy now lets hls.js start its demuxer
+  worker. It was being blocked, so HLS video was demuxed on the main thread
+  (#40).
+
 ## [0.3.2] - 2026-09-20
 
 ### Fixed
