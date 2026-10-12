@@ -39,4 +39,12 @@
 
   --danger:        {{ red }} !important;
   --danger-soft:   rgba({{ red_rgb }}, 0.12) !important;
+
+  /* Pictures and video get washed toward the background with a little of the
+     accent in it, so a white screenshot doesn't glare out of a dark theme and
+     photos pick up the theme's colour cast. On a light theme the same mix
+     softens toward the page instead of darkening. */
+  --media-tint:          {{ mix background accent 25% }} !important;
+  --media-tint-strength: 0.3 !important;
+  --media-filter:        url(#media-tint) !important;
 }

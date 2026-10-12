@@ -16,6 +16,10 @@
   --danger-soft: rgba(255, 107, 107, 0.1);
   --radius: 12px;
   --titlebar-h: 40px;
+  /* Off by default; the Omarchy theme turns it on (see #media-tint). */
+  --media-tint: transparent;
+  --media-tint-strength: 0;
+  --media-filter: none;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -447,6 +451,24 @@ button, input, select {
   justify-content: center;
   color: var(--text-faint);
   font-size: 13px;
+}
+
+/*
+ * Theme tint for pictures and video. Declared before .media-blur so the NSFW
+ * blur still wins on the same specificity.
+ */
+.svg-defs { position: absolute; pointer-events: none; }
+.media-tint-flood {
+  flood-color: var(--media-tint);
+  flood-opacity: var(--media-tint-strength);
+}
+.post-media img,
+.post-media video,
+.yt-fallback img,
+.link-card img,
+.comment-inline-img,
+#lightbox img {
+  filter: var(--media-filter);
 }
 
 .media-blur img { filter: blur(40px); }

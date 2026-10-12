@@ -101,6 +101,18 @@
     <button id="update-dismiss" type="button" title="Dismiss">✕</button>
   </div>
 
+  <!-- Media tint. Washes images and video toward --media-tint by
+       --media-tint-strength; both default to nothing, so this is a no-op until
+       a theme (omarchy/lurk.css.tpl) sets them. Clipped to the source's alpha
+       so object-fit letterboxing stays untouched. -->
+  <svg class="svg-defs" width="0" height="0" aria-hidden="true" focusable="false">
+    <filter id="media-tint" color-interpolation-filters="sRGB">
+      <feFlood class="media-tint-flood"/>
+      <feComposite in2="SourceGraphic" operator="in"/>
+      <feComposite in2="SourceGraphic" operator="over"/>
+    </filter>
+  </svg>
+
   <script src="../node_modules/hls.js/dist/hls.min.js"></script>
   <script src="util.js"></script>
   <script src="app.js"></script>
