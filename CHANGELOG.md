@@ -19,6 +19,12 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 - Omarchy packaging: a `lurk-reddit-bin` recipe under `packaging/omarchy/`
   that repackages the release `.deb` for Omarchy's package repo, so Lurk can be
   installed from Install → Package and updated with `pacman -Syu`. (#46)
+- On Omarchy, images, thumbnails and video are tinted toward the current
+  theme, so a white screenshot no longer glares out of a dark feed. The
+  colour is the theme background mixed 25% with its accent, laid over the
+  picture at 30%. Re-run `omarchy/install.sh` to pick up the new template;
+  without Omarchy nothing changes. To make it stronger or weaker, edit
+  `--media-tint-strength` in `~/.config/omarchy/themed/lurk.css.tpl` (#48).
 
 ## [0.3.3] - 2026-09-26
 
