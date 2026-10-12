@@ -9,6 +9,12 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 
 ## [Unreleased]
 
+### Security
+- Electron 43.2.0 to 43.7.9, which brings the Chromium security fixes from
+  the 43 line. js-yaml, which the updater uses to read release manifests, goes
+  to 4.3.2 for two CPU-exhaustion advisories (GHSA-5p4m-2wfm-xmqj,
+  GHSA-2883-xcg3-v3hh). hls.js moves to 1.7.3 (#50).
+
 ### Added
 - Omarchy packaging: a `lurk-reddit-bin` recipe under `packaging/omarchy/`
   that repackages the release `.deb` for Omarchy's package repo, so Lurk can be
