@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, net, nativeImage, session, shell, nativeThe
 const path = require('path');
 const omarchy = require('./omarchy');
 const { extractOgImage } = require('./lib/og');
-const { isSafeApiPath } = require('./lib/reddit-path');
+const { isSafeApiPath, toOauthPath } = require('./lib/reddit-path');
 const { createUpdater } = require('./lib/updater');
 const { needsVideoDecodeWorkaround } = require('./lib/gpu-workarounds');
 
@@ -63,10 +63,12 @@ function createWindow() {
 }
 
 /*
- * Reddit's edge (Fastly) returns 403 for bare JSON requests, but serves them
- * happily once the session carries the cookies a normal page visit sets.
- * So: load reddit.com once in a hidden window to acquire cookies, then fetch
- * JSON through Chromium's network stack with credentials included.
+ * Reddit 403s anonymous `.json` on www.reddit.com, even with a full cookie set
+ * from a real page visit (#52). What still works is what Reddit's own web app
+ * does: visit reddit.com once (it serves a JS challenge first, which the
+ * hidden window solves), take the anonymous `token_v2` cookie it sets, and
+ * call oauth.reddit.com with it as a bearer token. The token lasts ~24h; a
+ * 401/403 means it lapsed or got flagged, and we re-warm once for a new one.
  */
 let warmupPromise = null;
 
@@ -94,18 +96,28 @@ function warmCookies() {
     win.webContents.setAudioMuted(true);
     try {
       await win.loadURL('https://www.reddit.com/');
-      await new Promise(r => setTimeout(r, 2500));
+      // The challenge page submits itself and reloads; token_v2 is set after.
+      for (let waited = 0; waited < 10000 && !(await anonToken()); waited += 250) {
+        await new Promise(r => setTimeout(r, 250));
+      }
     } catch { /* offline or blocked — fetches will surface the error */ }
     win.destroy();
   })();
   return warmupPromise;
 }
 
-async function redditFetch(url) {
-  return net.fetch(url, {
-    credentials: 'include',
-    headers: { 'Accept': 'application/json' }
+async function anonToken() {
+  const [cookie] = await session.defaultSession.cookies.get({
+    url: 'https://www.reddit.com', name: 'token_v2'
   });
+  return cookie ? cookie.value : null;
+}
+
+async function redditFetch(url) {
+  const headers = { 'Accept': 'application/json' };
+  const token = await anonToken();
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  return net.fetch(url, { headers });
 }
 
 app.whenReady().then(() => {
@@ -197,12 +209,13 @@ ipcMain.handle('reddit:fetch', async (_event, apiPath) => {
   if (!isSafeApiPath(apiPath)) {
     return { ok: false, error: 'Bad request path' };
   }
-  const url = 'https://www.reddit.com' + apiPath;
+  const url = 'https://oauth.reddit.com' + toOauthPath(apiPath);
   try {
     await warmCookies();
     let res = await redditFetch(url);
-    if (res.status === 403) {
-      // cookies expired or got flagged — re-warm once and retry
+    if (res.status === 401 || res.status === 403) {
+      // token expired or got flagged — re-warm once for a fresh one and retry
+      await session.defaultSession.cookies.remove('https://www.reddit.com', 'token_v2');
       warmupPromise = null;
       await warmCookies();
       res = await redditFetch(url);

@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { isSafeApiPath, MAX_LENGTH } = require('../../lib/reddit-path.js');
+const { isSafeApiPath, toOauthPath, MAX_LENGTH } = require('../../lib/reddit-path.js');
 
 const BACKSLASH = String.fromCharCode(92);
 
@@ -63,4 +63,21 @@ test('enforces a length ceiling', () => {
 
 test('percent-encoded input is accepted, since that is what encodeURIComponent emits', () => {
   assert.ok(isSafeApiPath('/search.json?q=cute%20cats%26dogs'));
+});
+
+test('toOauthPath drops the .json suffix and keeps the query', () => {
+  const cases = [
+    ['/hot.json?limit=25&raw_json=1', '/hot?limit=25&raw_json=1'],
+    ['/r/pics/top.json?limit=25&raw_json=1&t=week', '/r/pics/top?limit=25&raw_json=1&t=week'],
+    ['/search.json?q=cats&sort=relevance', '/search?q=cats&sort=relevance'],
+    ['/subreddits/search.json?q=pi&limit=6', '/subreddits/search?q=pi&limit=6'],
+    ['/r/x/comments/abc/some_title/.json?raw_json=1&limit=80', '/r/x/comments/abc/some_title/?raw_json=1&limit=80'],
+    ['/r/pics/about.json', '/r/pics/about'],
+    ['/r/pics/hot', '/r/pics/hot']
+  ];
+  for (const [input, want] of cases) assert.equal(toOauthPath(input), want, input);
+});
+
+test('toOauthPath leaves .json inside the query alone', () => {
+  assert.equal(toOauthPath('/search.json?q=file.json'), '/search?q=file.json');
 });
