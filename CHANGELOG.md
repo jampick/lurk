@@ -9,6 +9,12 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 
 ## [Unreleased]
 
+### Fixed
+- Every feed and comment thread failed with "Reddit returned 403". Reddit now
+  blocks anonymous `.json` requests on www.reddit.com even with cookies from a
+  real page visit, so Lurk takes the anonymous token reddit.com hands out and
+  reads the same JSON from oauth.reddit.com instead. (#52)
+
 ### Security
 - Electron 43.2.0 to 43.7.9, which brings the Chromium security fixes from
   the 43 line. js-yaml, which the updater uses to read release manifests, goes
