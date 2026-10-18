@@ -9,6 +9,13 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 
 ## [Unreleased]
 
+### Fixed
+- Opening a post's comments failed with "Reddit returned 403". Reddit now
+  blocks its comment API for anonymous visitors, so Lurk reads comments from
+  the HTML fragment reddit.com loads for its own comment section, still with
+  no login. "More replies" and "more comments" now load in place instead of
+  being dead text. Threads start with 25 comments rather than 80. (#54)
+
 ## [0.4.0] - 2026-10-14
 
 ### Fixed

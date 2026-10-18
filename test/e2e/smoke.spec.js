@@ -78,7 +78,7 @@ test('the preload bridge exposes the expected API', async () => {
   }));
 
   expect(api.keys).toEqual([
-    'articlePreviewImage', 'fetchReddit', 'openExternal',
+    'articlePreviewImage', 'fetchReddit', 'moreComments', 'openExternal',
     'platform', 'setBadge', 'setZoom', 'updates', 'zoomBy'
   ]);
   expect(api.updateKeys).toEqual(['check', 'getState', 'install', 'onState', 'openReleasePage']);
@@ -120,6 +120,33 @@ test('the reddit fetch channel rejects an unsafe path', async () => {
   const res = await page.evaluate(() => window.lurk.fetchReddit('//evil.example.com/x'));
   expect(res.ok).toBe(false);
   expect(res.error).toBe('Bad request path');
+});
+
+test('the more-comments channel rejects anything but a more-comments stub', async () => {
+  const res = await page.evaluate(() => window.lurk.moreComments('/api/info?id=t3_x', ''));
+  expect(res.ok).toBe(false);
+  expect(res.error).toBe('Bad request path');
+});
+
+test('a scraped comment body keeps formatting and links, nothing else (#54)', async () => {
+  const html = await page.evaluate(() => window.shredditHtml(`
+    <div id="t1_x-post-rtjson-content" class="py-0" style="color:red" dir="auto">
+      <p onclick="alert(1)">hi <strong class="x">there</strong> <a href="javascript:alert(1)">bad</a>
+        <a href="/r/pics" class="y">sub</a></p>
+      <script>window.pwned = 1</script><style>body{display:none}</style>
+      <img src="https://i.redd.it/loose.png" onerror="window.pwned = 2">
+      <figure class="rte-media"><a href="https://preview.redd.it/pic.jpeg?s=1" class="w-fit">
+        <img src="https://preview.redd.it/pic.jpeg?s=1" srcset="a 1x"></a></figure>
+      <shreddit-async-loader bundleName="p"><shreddit-player src="https://x/y.mp4">
+        <source src="https://x/y.mp4"></shreddit-player></shreddit-async-loader>
+      <iframe src="https://evil.example"></iframe>
+    </div>`).innerHTML.replace(/\s+/g, ' ').trim());
+  expect(html).toBe(
+    '<p>hi <strong>there</strong> <a>bad</a> ' +
+    '<a href="https://www.reddit.com/r/pics" target="_blank" rel="noreferrer noopener">sub</a></p> ' +
+    '<a href="https://i.redd.it/loose.png" target="_blank" rel="noreferrer noopener">https://i.redd.it/loose.png</a> ' +
+    '<a href="https://preview.redd.it/pic.jpeg?s=1" target="_blank" rel="noreferrer noopener">https://preview.redd.it/pic.jpeg?s=1</a>');
+  expect(await page.evaluate(() => window.pwned)).toBeUndefined();
 });
 
 test('an expired preview keeps its media box instead of collapsing the card', async () => {
