@@ -9,6 +9,8 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-18
+
 ### Fixed
 - Opening a post's comments failed with "Reddit returned 403". Reddit now
   blocks its comment API for anonymous visitors, so Lurk reads comments from
@@ -151,7 +153,8 @@ change in a desktop app, and [RELEASING.md](RELEASING.md) for how to cut one.
 - First release: media-first Reddit feed, comments panel, subreddit sidebar,
   search, infinite scroll, and Windows/macOS/Linux packages.
 
-[Unreleased]: https://github.com/jampick/lurk/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/jampick/lurk/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/jampick/lurk/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jampick/lurk/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/jampick/lurk/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/jampick/lurk/compare/v0.3.1...v0.3.2
