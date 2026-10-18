@@ -44,6 +44,10 @@ function el(tag, cls, text) {
 function redditHtml(escapedHtml) {
   const div = el('div');
   div.innerHTML = decodeEntities(escapedHtml);
+  return fixLinks(div);
+}
+
+function fixLinks(div) {
   $$('a', div).forEach(a => {
     const href = safeHref(a.getAttribute('href'));
     if (!href) {
@@ -55,6 +59,52 @@ function redditHtml(escapedHtml) {
     a.rel = 'noreferrer noopener';
   });
   return div;
+}
+
+/*
+ * Comment bodies scraped from Reddit's page markup (#54) carry its classes,
+ * ids, inline styles, web components and <img srcset>, none of it sanitized
+ * for us. Parse inert, keep text-formatting tags with no attributes but a
+ * link's href, and turn embedded images and GIF players back into plain links
+ * so inlineCommentImages shows them the same way as in API bodies.
+ */
+const COMMENT_TAGS = new Set([
+  'P', 'BR', 'EM', 'I', 'STRONG', 'B', 'DEL', 'S', 'SUP', 'SUB', 'CODE', 'PRE',
+  'BLOCKQUOTE', 'UL', 'OL', 'LI', 'A', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HR',
+  'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'SPAN'
+]);
+const COMMENT_DROP = new Set([
+  'SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'FORM', 'INPUT', 'BUTTON',
+  'TEXTAREA', 'SELECT', 'SVG', 'MATH', 'TEMPLATE', 'NOSCRIPT', 'LINK', 'META',
+  'SOURCE', 'VIDEO', 'AUDIO', 'SHREDDIT-PLAYER', 'IMG'
+]);
+
+function shredditHtml(html) {
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  for (const img of $$('img[src]', doc.body)) {
+    if (!img.closest('a[href]')) {
+      const a = doc.createElement('a');
+      a.setAttribute('href', img.getAttribute('src'));
+      img.replaceWith(a);
+    }
+  }
+  const walk = (node) => {
+    for (const child of [...node.children]) {
+      walk(child);
+      if (COMMENT_DROP.has(child.tagName)) { child.remove(); continue; }
+      if (!COMMENT_TAGS.has(child.tagName)) { child.replaceWith(...child.childNodes); continue; }
+      for (const { name } of [...child.attributes]) {
+        if (!(child.tagName === 'A' && name === 'href')) child.removeAttribute(name);
+      }
+      if (child.tagName === 'A' && !child.textContent.trim()) {
+        child.textContent = child.getAttribute('href') || '';
+      }
+    }
+  };
+  walk(doc.body);
+  const div = el('div');
+  div.append(...doc.body.childNodes);
+  return fixLinks(div);
 }
 
 /* ---- inline images for links inside comments ---- */
@@ -730,10 +780,7 @@ async function loadComments(container, p) {
 }
 
 function renderComment(c, opAuthor, depth) {
-  if (c.kind === 'more') {
-    if (!c.data?.count) return null;
-    return el('button', 'load-more-comments', `+ ${c.data.count} more replies (open on Reddit)`);
-  }
+  if (c.kind === 'more') return renderMore(c.data, opAuthor, depth);
   if (c.kind !== 't1') return null;
   const d = c.data;
 
@@ -749,7 +796,7 @@ function renderComment(c, opAuthor, depth) {
   meta.title = 'Collapse / expand thread';
   node.appendChild(meta);
 
-  const body = redditHtml(d.body_html);
+  const body = d.body_shreddit != null ? shredditHtml(d.body_shreddit) : redditHtml(d.body_html);
   body.className = 'comment-body';
   inlineCommentImages(body);
   node.appendChild(body);
@@ -765,6 +812,38 @@ function renderComment(c, opAuthor, depth) {
       `${childCount} ${childCount === 1 ? 'reply' : 'replies'} hidden`));
   }
   return node;
+}
+
+// A stub from the scraped partial loads its batch in place, as siblings at
+// the stub's depth. Stubs from the JSON API have no src and stay inert.
+function renderMore(m, opAuthor, depth) {
+  if (!m?.src) {
+    if (!m?.count) return null;
+    return el('button', 'load-more-comments', `+ ${m.count} more replies (open on Reddit)`);
+  }
+  const label = m.top_level
+    ? (m.count ? `+ ${compact(m.count)} more comments` : '+ more comments')
+    : '+ more replies';
+  const btn = el('button', 'load-more-comments', label);
+  btn.onclick = async () => {
+    btn.disabled = true;
+    btn.textContent = 'loading…';
+    const res = await window.lurk.moreComments(m.src, m.cursor);
+    if (!res.ok) {
+      btn.disabled = false;
+      btn.textContent = `${label} (failed: ${res.error}, retry)`;
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    for (const c of res.data) {
+      // live mode may already have merged some of these in
+      if (c.kind === 't1' && paneContent.querySelector(`[data-cid="${CSS.escape(c.data.id)}"]`)) continue;
+      const node = renderComment(c, opAuthor, depth);
+      if (node) frag.appendChild(node);
+    }
+    btn.replaceWith(frag);
+  };
+  return btn;
 }
 
 function closeDetail() {

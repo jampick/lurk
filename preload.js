@@ -35,6 +35,7 @@ ipcRenderer.on('update:state', (_event, state) => {
 
 contextBridge.exposeInMainWorld('lurk', {
   fetchReddit: (apiPath) => ipcRenderer.invoke('reddit:fetch', apiPath),
+  moreComments: (src, cursor) => ipcRenderer.invoke('reddit:moreComments', src, cursor),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
   articlePreviewImage: (url) => ipcRenderer.invoke('article:previewImage', url),
   setBadge: (dataUrl, count) => ipcRenderer.invoke('app:badge', dataUrl, count),

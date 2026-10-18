@@ -3,6 +3,7 @@ const path = require('path');
 const omarchy = require('./omarchy');
 const { extractOgImage } = require('./lib/og');
 const { isSafeApiPath, toOauthPath } = require('./lib/reddit-path');
+const shreddit = require('./lib/shreddit');
 const { createUpdater } = require('./lib/updater');
 const { needsVideoDecodeWorkaround } = require('./lib/gpu-workarounds');
 
@@ -205,26 +206,72 @@ ipcMain.on('omarchy:init', (event) => {
   };
 });
 
+async function oauthJson(apiPath) {
+  const url = 'https://oauth.reddit.com' + toOauthPath(apiPath);
+  await warmCookies();
+  let res = await redditFetch(url);
+  if (res.status === 401 || res.status === 403) {
+    // token expired or got flagged — re-warm once for a fresh one and retry
+    await session.defaultSession.cookies.remove('https://www.reddit.com', 'token_v2');
+    warmupPromise = null;
+    await warmCookies();
+    res = await redditFetch(url);
+  }
+  if (!res.ok) {
+    return { ok: false, error: `Reddit returned ${res.status}`, status: res.status };
+  }
+  return { ok: true, data: await res.json() };
+}
+
+async function shredditPartial(partialPath, cursor) {
+  const init = cursor === undefined ? {} : {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(cursor ? { cursor } : {}).toString()
+  };
+  const res = await net.fetch('https://www.reddit.com' + partialPath, init);
+  if (!res.ok) throw new Error(`Reddit returned ${res.status}`);
+  return res.text();
+}
+
+/*
+ * Reddit 403s the JSON comment tree for the anonymous token (#54), so a
+ * thread is the post from /by_id plus comments scraped from the partial the
+ * new site loads, returned in the API's usual [post, comments] shape.
+ */
+async function commentThread({ id, sort }) {
+  const post = await oauthJson(`/by_id/t3_${id}`);
+  if (!post.ok) return post;
+  const p = post.data?.data?.children?.[0]?.data;
+  if (!p) return { ok: false, error: 'Post not found' };
+  const children = shreddit.parseComments(
+    await shredditPartial(shreddit.commentsPartialPath(p.subreddit, id, sort)));
+  if (p.num_comments > 0 && !children.length) {
+    return { ok: false, error: "Couldn't read Reddit's comment page (its layout may have changed)" };
+  }
+  return { ok: true, data: [post.data, { kind: 'Listing', data: { children } }] };
+}
+
 ipcMain.handle('reddit:fetch', async (_event, apiPath) => {
   if (!isSafeApiPath(apiPath)) {
     return { ok: false, error: 'Bad request path' };
   }
-  const url = 'https://oauth.reddit.com' + toOauthPath(apiPath);
   try {
-    await warmCookies();
-    let res = await redditFetch(url);
-    if (res.status === 401 || res.status === 403) {
-      // token expired or got flagged — re-warm once for a fresh one and retry
-      await session.defaultSession.cookies.remove('https://www.reddit.com', 'token_v2');
-      warmupPromise = null;
-      await warmCookies();
-      res = await redditFetch(url);
-    }
-    if (!res.ok) {
-      return { ok: false, error: `Reddit returned ${res.status}`, status: res.status };
-    }
-    const data = await res.json();
-    return { ok: true, data };
+    const thread = shreddit.commentThread(apiPath);
+    return thread ? await commentThread(thread) : await oauthJson(apiPath);
+  } catch (err) {
+    return { ok: false, error: err.message || 'Network error' };
+  }
+});
+
+ipcMain.handle('reddit:moreComments', async (_event, src, cursor) => {
+  if (!shreddit.isSafeMore(src, cursor)) {
+    return { ok: false, error: 'Bad request path' };
+  }
+  try {
+    const children = shreddit.parseComments(await shredditPartial(src, cursor));
+    if (!children.length) return { ok: false, error: 'No more comments' };
+    return { ok: true, data: children };
   } catch (err) {
     return { ok: false, error: err.message || 'Network error' };
   }
